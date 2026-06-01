@@ -1,0 +1,38 @@
+# ── macOS ────────────────────────────────────────────────────────────────────
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+.Spotlight-V100
+.Trashes
+
+# ── Xcode ────────────────────────────────────────────────────────────────────
+xcuserdata/
+*.xcuserstate
+*.xccheckout
+*.moved-aside
+*.xcscmblueprint
+*.xcuserdatad
+
+# ── Build output ─────────────────────────────────────────────────────────────
+DerivedData/
+build/
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# ── Swift Package Manager ─────────────────────────────────────────────────────
+.build/
+Packages/
+Package.resolved
+.swiftpm/
+
+# ── Code signing ─────────────────────────────────────────────────────────────
+*.p12
+*.mobileprovision
+*.provisionprofile
+ExportOptions.plist
+
+# ── Internal / private ───────────────────────────────────────────────────────
+private/
