@@ -2,7 +2,7 @@
   <img src="public/lattelogo.jpg" alt="latte Logo" width="64" />
   <br />
   <h1 align="center">latte</h1>
-  <p align="center">Download Anything. Instantly.</p>
+  <p align="center">Just Download Anything.</p>
   <p align="center">
     <a href="https://github.com/arinltte/latte/releases/latest"><img src="https://img.shields.io/github/v/release/arinltte/latte?style=flat-square&color=blue" alt="Latest Release" /></a>
     <a href="https://github.com/arinltte/latte/blob/main/LICENSE"><img src="https://img.shields.io/github/license/arinltte/latte?style=flat-square&color=green" alt="License" /></a>
