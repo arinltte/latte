@@ -15,6 +15,8 @@
 
 **latte** is a lightweight, ultra-fast video and audio downloader for macOS that lives entirely in your menu bar. Built natively with SwiftUI, it allows you to download media from thousands of popular websites instantly—without opening a browser tab, dealing with ads, or navigating complex command-line tools.
 
+<video src="https://github.com/user-attachments/assets/606b279f-7a26-4977-8e6a-1e596f7245e9" controls width="800"></video>
+
 ---
 
 ## 🏗️ Features
