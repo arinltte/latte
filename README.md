@@ -23,8 +23,10 @@
 
 - **Menu bar native** — Lives quietly in your menu bar. No Dock icon, no persistent window, no interruption to your workflow.
 - **Universal support** — Supports downloading from over 1,000+ popular platforms including YouTube, Twitch, TikTok, Vimeo, Facebook, Instagram, Twitter, and major news/sports outlets.
+- **Browser Authentication** — Securely inject cookies from Safari, Chrome, Firefox, Brave, and more to download age-restricted, private, or login-required content (like Reddit videos). 
 - **Batch downloading** — Paste multiple links at once. The UI automatically collapses to save space while fetching massive playlists or batches in the background.
-- **Customizable format priority** — Easily drag-and-drop your preferred video and audio formats (e.g., MP4 1080p, MP3 320k, FLAC) so you always get the exact quality you want.
+- **Advanced format management** — Reorder your preferred video and audio formats (supports modern codecs like AV1, WebM, MKV, FLAC, ALAC). Hide formats you don't use to keep your interface perfectly clean.
+- **Smart Auto-Dismiss & Pinning** — Click anywhere outside the app to hide it instantly, or use the "Keep Window Open" toggle to pin it to your screen.
 - **Post-processing made easy** — Automatically embed thumbnails, inject metadata, and burn subtitles directly into your downloaded files.
 - **Zero-dependency setup** — Automatically configures its own fast backend engine (`yt-dlp`) locally. No manual Python or terminal setup required.
 - **Premium ambient design** — Features a stunning, zero-overhead animated frosted glass interface (choose between Default, Rare Jade, Deep Ocean, or Floral themes).
@@ -36,6 +38,10 @@
 - macOS 14 (Sonoma) or later.
 - **ffmpeg** is recommended for merging high-quality video/audio formats and converting to specific audio types.
   - Install via Homebrew: `brew install ffmpeg`
+ 
+### Browser Cookies & Permissions
+If you choose to use **Safari** for browser authentication to download restricted content, macOS Sandboxing requires you to grant **Full Disk Access** to latte.
+Go to **System Settings → Privacy & Security → Full Disk Access** and toggle latte on. (Other browsers like Chrome or Firefox may prompt you for your Keychain password).
 
 ---
 
