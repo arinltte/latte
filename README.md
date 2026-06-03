@@ -31,6 +31,25 @@
 
 ---
 
+## 🌐 Supported Sites
+
+latte is powered by [yt-dlp](https://github.com/yt-dlp/yt-dlp) and supports downloading from **1,800+ websites**, including:
+
+- **Video platforms**: YouTube, Vimeo, Dailymotion, Twitch, Rumble, Odysee, PeerTube
+- **Social media**: TikTok, Instagram, Facebook, Twitter/X, Reddit, Tumblr, Pinterest
+- **Music & audio**: SoundCloud, Bandcamp, Mixcloud, Audiomack
+- **News & media**: BBC, CNN, NPR, Reuters, ABC, NBC, CBS, The Guardian, Bloomberg
+- **Sports**: ESPN, MLB, NBA, NFL, Olympics
+- **Asian platforms**: Bilibili, Niconico, Youku, iQIYI, Weibo
+- **Live streams**: Twitch, YouTube Live, Kick, Steam Community
+- **Podcasts & radio**: Apple Podcasts, Spotify, Stitcher, iHeartRadio
+
+And many more. You can also view the full list directly within the app under **Settings → Supported Sites**.
+
+For the complete and always up-to-date list, see the [yt-dlp supported sites](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md) documentation.
+
+---
+
 ## Requirements
 
 - macOS 14 (Sonoma) or later.

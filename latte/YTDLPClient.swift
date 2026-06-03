@@ -190,6 +190,10 @@ class YTDLPClient: ObservableObject {
 
     @Published var ffmpegAvailable: Bool = false
 
+    @Published var supportedSites: [String] = []
+    @Published var isLoadingSupportedSites: Bool = false
+    @Published var supportedSitesError: String? = nil
+
     private var activeDownloadTask: Task<Void, Never>? = nil
     private var currentDownloadProcess: Process? = nil
     private var fetchDebounceTask: Task<Void, Never>? = nil
@@ -690,6 +694,58 @@ class YTDLPClient: ObservableObject {
     func resetFormatOrders() {
         videoFormatOrder = VideoFormatOption.allOptions.map(\.id)
         audioFormatOrder = AudioFormatOption.allOptions.map(\.id)
+    }
+
+    func fetchSupportedSites() {
+        guard !isLoadingSupportedSites else { return }
+
+        isLoadingSupportedSites = true
+        supportedSitesError = nil
+
+        let safeYtdlpExe = self.ytdlpExecutable()
+
+        Task.detached {
+            let task = Process()
+            task.executableURL = URL(fileURLWithPath: "/bin/bash")
+
+            let script = """
+            export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+            "\(safeYtdlpExe)" --list-extractors 2>/dev/null
+            """
+            task.arguments = ["-c", script]
+
+            let pipe = Pipe()
+            task.standardOutput = pipe
+            task.standardError = FileHandle.nullDevice
+
+            do {
+                try task.run()
+                task.waitUntilExit()
+
+                let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                let output = String(data: data, encoding: .utf8) ?? ""
+
+                let sites = output
+                    .components(separatedBy: .newlines)
+                    .map { $0.trimmingCharacters(in: .whitespaces) }
+                    .filter { !$0.isEmpty && !$0.hasPrefix("generic") }
+                    .sorted { $0.lowercased() < $1.lowercased() }
+
+                await MainActor.run {
+                    self.supportedSites = sites
+                    self.isLoadingSupportedSites = false
+
+                    if task.terminationStatus != 0 && sites.isEmpty {
+                        self.supportedSitesError = "Could not load site list"
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    self.isLoadingSupportedSites = false
+                    self.supportedSitesError = error.localizedDescription
+                }
+            }
+        }
     }
 
     func formatDuration(_ seconds: Int) -> String {

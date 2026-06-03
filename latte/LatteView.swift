@@ -14,6 +14,8 @@ struct LatteView: View {
     @State private var showSettings: Bool = false
     @State private var showAbout: Bool = false
     @State private var showFormatPriority: Bool = false
+    @State private var showSupportedSites: Bool = false
+    @State private var supportedSitesSearch: String = ""
     
     @FocusState private var isInputFocused: Bool
     @State private var isMultipleLinksCollapsed: Bool = false
@@ -24,7 +26,7 @@ struct LatteView: View {
     private let baseWindowWidth: CGFloat = 380
     
     private var dynamicWindowHeight: CGFloat {
-        if showFormatPriority || showSettings || showAbout {
+        if showFormatPriority || showSettings || showAbout || showSupportedSites {
             return 360
         }
         let expandList = client.isPlaylist && !client.videoEntries.isEmpty
@@ -37,6 +39,8 @@ struct LatteView: View {
                 setupOverlay
             } else if showFormatPriority {
                 formatPriorityContent
+            } else if showSupportedSites {
+                supportedSitesContent
             } else if showSettings {
                 if showAbout {
                     aboutContent
@@ -51,7 +55,7 @@ struct LatteView: View {
 
             if client.setupState == .ready {
                 Divider().opacity(0.5)
-                if showFormatPriority || showAbout {
+                if showFormatPriority || showAbout || showSupportedSites {
                     backOnlyBottomBar
                 } else {
                     bottomBar
@@ -63,6 +67,7 @@ struct LatteView: View {
         .animation(.easeInOut(duration: 0.2), value: showSettings)
         .animation(.easeInOut(duration: 0.2), value: showAbout)
         .animation(.easeInOut(duration: 0.2), value: showFormatPriority)
+        .animation(.easeInOut(duration: 0.2), value: showSupportedSites)
         // Set the active tint color based on the selected theme
         .tint(client.appTheme.accentColor)
         .background(AmbientThemeBackground(theme: client.appTheme))
@@ -497,12 +502,14 @@ struct LatteView: View {
                         showFormatPriority = false
                     } else if showAbout {
                         showAbout = false
+                    } else if showSupportedSites {
+                        showSupportedSites = false
                     } else {
                         showSettings.toggle()
                     }
                 }
             }) {
-                Image(systemName: (showSettings || showAbout || showFormatPriority) ? "chevron.left" : "gearshape")
+                Image(systemName: (showSettings || showAbout || showFormatPriority || showSupportedSites) ? "chevron.left" : "gearshape")
                     .font(.system(size: 11))
                     .foregroundColor(.secondary)
                     .frame(width: 40, alignment: .leading)
@@ -541,6 +548,7 @@ struct LatteView: View {
             Button(action: {
                 withAnimation(.easeInOut(duration: 0.15)) {
                     if showFormatPriority { showFormatPriority = false }
+                    else if showSupportedSites { showSupportedSites = false }
                     else if showAbout { showAbout = false }
                 }
             }) {
@@ -620,6 +628,24 @@ struct LatteView: View {
                     Spacer()
                     Button("Edit") {
                         withAnimation { showFormatPriority = true }
+                    }
+                    .font(.system(size: 10))
+                    .controlSize(.small)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Supported Sites")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundColor(.secondary)
+                HStack {
+                    Text("View all supported websites")
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
+                    Spacer()
+                    Button("View") {
+                        client.fetchSupportedSites()
+                        withAnimation { showSupportedSites = true }
                     }
                     .font(.system(size: 10))
                     .controlSize(.small)
@@ -717,6 +743,112 @@ struct LatteView: View {
             Spacer(minLength: 0)
         }
         .padding(14)
+    }
+
+    // MARK: - Supported Sites Content
+
+    private var supportedSitesContent: some View {
+        VStack(spacing: 8) {
+            HStack {
+                Text("Supported Sites")
+                    .font(.system(size: 14, weight: .semibold))
+                Spacer()
+                if !client.supportedSites.isEmpty {
+                    Text("\(client.supportedSites.count)")
+                        .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(client.appTheme.accentColor)
+                        .cornerRadius(4)
+                }
+            }
+            .padding(.bottom, 2)
+
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
+                TextField("Search sites…", text: $supportedSitesSearch)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 12))
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(Color.black.opacity(0.15))
+            .cornerRadius(6)
+
+            if client.isLoadingSupportedSites {
+                Spacer()
+                VStack(spacing: 8) {
+                    ProgressView().scaleEffect(0.7)
+                    Text("Loading sites…")
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
+                }
+                Spacer()
+            } else if let error = client.supportedSitesError {
+                Spacer()
+                VStack(spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 18))
+                        .foregroundColor(.orange)
+                    Text(error)
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
+                    Button("Retry") {
+                        client.fetchSupportedSites()
+                    }
+                    .font(.system(size: 10))
+                    .controlSize(.small)
+                }
+                Spacer()
+            } else {
+                let filtered = supportedSitesSearch.isEmpty
+                    ? client.supportedSites
+                    : client.supportedSites.filter {
+                        $0.localizedCaseInsensitiveContains(supportedSitesSearch)
+                    }
+
+                if filtered.isEmpty && !supportedSitesSearch.isEmpty {
+                    Spacer()
+                    VStack(spacing: 4) {
+                        Image(systemName: "magnifyingglass")
+                            .font(.system(size: 16))
+                            .foregroundColor(.secondary)
+                        Text("No sites found")
+                            .font(.system(size: 11))
+                            .foregroundColor(.secondary)
+                    }
+                    Spacer()
+                } else {
+                    ScrollView {
+                        LazyVStack(spacing: 1) {
+                            ForEach(filtered, id: \.self) { site in
+                                HStack(spacing: 8) {
+                                    Image(systemName: "globe")
+                                        .font(.system(size: 10))
+                                        .foregroundColor(.secondary)
+                                        .frame(width: 14)
+                                    Text(site)
+                                        .font(.system(size: 11))
+                                        .lineLimit(1)
+                                    Spacer()
+                                }
+                                .padding(.vertical, 3)
+                                .padding(.horizontal, 8)
+                            }
+                        }
+                    }
+                    .background(Color.black.opacity(0.1))
+                    .cornerRadius(6)
+                }
+            }
+        }
+        .padding(14)
+        .onAppear {
+            supportedSitesSearch = ""
+        }
     }
 
     private func chooseDownloadFolder() {
