@@ -24,6 +24,7 @@ extension Notification.Name {
 class AppDelegate: NSObject, NSApplicationDelegate {
     var statusItem: NSStatusItem?
     var floatingPanel: FloatingPanel!
+    var globalEventMonitor: Any?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -31,6 +32,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         setupStatusBar()
         setupFloatingPanel()
         setupNotifications()
+        setupEventMonitor()
     }
 
     func setupStatusBar() {
@@ -83,6 +85,27 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         ) { [weak self] notification in
             if let icon = notification.userInfo?["icon"] as? String {
                 self?.statusItem?.button?.image = NSImage(systemSymbolName: icon, accessibilityDescription: "Latte")
+            }
+        }
+    }
+
+    func setupEventMonitor() {
+        globalEventMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
+            guard let self = self, let panel = self.floatingPanel, panel.isVisible else { return }
+            
+            let keepOpen = UserDefaults.standard.bool(forKey: "keepPanelOpen")
+            if keepOpen { return }
+            
+            // Do not force-close if standard dialog boxes (like OpenPanel/SavePanel) are currently running
+            if NSApp.modalWindow != nil { return }
+            
+            let mouseLocation = NSEvent.mouseLocation
+            if !panel.frame.contains(mouseLocation) {
+                // Also prevent hiding if they literally clicked the status bar icon (handled by statusBarClicked toggle)
+                if let button = self.statusItem?.button, let window = button.window {
+                    if window.frame.contains(mouseLocation) { return }
+                }
+                self.hidePanel()
             }
         }
     }

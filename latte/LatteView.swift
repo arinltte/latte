@@ -24,8 +24,11 @@ struct LatteView: View {
     private let baseWindowWidth: CGFloat = 380
     
     private var dynamicWindowHeight: CGFloat {
-        if showFormatPriority || showSettings || showAbout {
-            return 360
+        if showFormatPriority {
+            return 480
+        }
+        if showSettings || showAbout {
+            return 410 // Adjusted for removed Safari warning height
         }
         let expandList = client.isPlaylist && !client.videoEntries.isEmpty
         return expandList ? 460 : 360
@@ -63,7 +66,6 @@ struct LatteView: View {
         .animation(.easeInOut(duration: 0.2), value: showSettings)
         .animation(.easeInOut(duration: 0.2), value: showAbout)
         .animation(.easeInOut(duration: 0.2), value: showFormatPriority)
-        // Set the active tint color based on the selected theme
         .tint(client.appTheme.accentColor)
         .background(AmbientThemeBackground(theme: client.appTheme))
         .clipShape(RoundedRectangle(cornerRadius: 12))
@@ -111,10 +113,8 @@ struct LatteView: View {
 
     private var mainContent: some View {
         VStack(alignment: .leading, spacing: 8) {
-            // URL Input
             urlInputSection
 
-            // Multiple Links Toggle
             HStack {
                 Toggle(isOn: Binding(
                     get: { client.isMultipleLinks },
@@ -130,22 +130,21 @@ struct LatteView: View {
             }
             .padding(.horizontal, 12)
 
-            // Format Selection
             formatSelectionSection
 
-            // Video Info / Playlist
             videoInfoSection
 
-            // Info Error
             if let error = client.infoError {
                 HStack(alignment: .top, spacing: 4) {
                     Image(systemName: "exclamationmark.triangle")
                         .font(.system(size: 9))
                         .foregroundColor(.orange)
+                        .padding(.top, 2)
                     Text(error)
                         .font(.system(size: 10))
                         .foregroundColor(.orange)
-                        .lineLimit(2)
+                        .lineLimit(4)
+                        .fixedSize(horizontal: false, vertical: true)
                     Spacer()
                 }
                 .padding(.horizontal, 12)
@@ -153,7 +152,6 @@ struct LatteView: View {
 
             Spacer(minLength: 0)
 
-            // Download Button / Progress
             downloadSection
         }
         .padding(.top, 12)
@@ -167,13 +165,12 @@ struct LatteView: View {
             if client.isMultipleLinks {
                 ZStack(alignment: .topTrailing) {
                     ZStack(alignment: .topLeading) {
-                        // Flawlessly matched TextEditor macOS intrinsic insets
                         if client.urlText.isEmpty {
                             Text("Paste video links (one per line)…")
                                 .foregroundColor(.secondary.opacity(0.6))
                                 .font(.system(size: 13))
-                                .padding(.leading, 5) // TextEditor internal native padding
-                                .padding(.top, 0)
+                                .padding(.leading, 9)
+                                .padding(.top, 8)
                         }
                         TextEditor(text: $client.urlText)
                             .font(.system(size: 13))
@@ -207,7 +204,7 @@ struct LatteView: View {
 
                     if !client.urlText.isEmpty {
                         Button(action: {
-                            client.urlText = "" // Naturally triggers clear state
+                            client.urlText = ""
                         }) {
                             Image(systemName: "xmark.circle.fill")
                                 .font(.system(size: 12))
@@ -255,7 +252,7 @@ struct LatteView: View {
                     get: { client.selectedVideoFormatId },
                     set: { val in Task { @MainActor in client.selectedVideoFormatId = val } }
                 )) {
-                    ForEach(client.orderedVideoFormats) { fmt in
+                    ForEach(client.activeVideoFormats) { fmt in
                         Text(fmt.displayName).tag(fmt.id)
                     }
                 }
@@ -266,7 +263,7 @@ struct LatteView: View {
                     get: { client.selectedAudioFormatId },
                     set: { val in Task { @MainActor in client.selectedAudioFormatId = val } }
                 )) {
-                    ForEach(client.orderedAudioFormats) { fmt in
+                    ForEach(client.activeAudioFormats) { fmt in
                         Text(fmt.displayName).tag(fmt.id)
                     }
                 }
@@ -409,7 +406,6 @@ struct LatteView: View {
 
     private var downloadSection: some View {
         VStack(spacing: 6) {
-            // Results indicators positioned above the button
             if client.downloadCompleted {
                 HStack(spacing: 4) {
                     Image(systemName: "checkmark.circle.fill").font(.system(size: 10)).foregroundColor(Color.green.opacity(0.8))
@@ -423,7 +419,7 @@ struct LatteView: View {
             if let error = client.downloadError {
                 HStack(spacing: 4) {
                     Image(systemName: "xmark.circle.fill").font(.system(size: 10)).foregroundColor(.red)
-                    Text(error).font(.system(size: 10)).foregroundColor(.red).lineLimit(1)
+                    Text(error).font(.system(size: 10)).foregroundColor(.red).lineLimit(2)
                     Spacer()
                 }
                 .padding(.horizontal, 12)
@@ -589,6 +585,31 @@ struct LatteView: View {
                         .controlSize(.small)
                 }
             }
+            
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Authentication (For Restricted Sites)")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundColor(.secondary)
+                HStack {
+                    Text("Browser Cookies")
+                        .font(.system(size: 12))
+                    Spacer()
+                    Picker("", selection: $client.browserCookies) {
+                        ForEach(BrowserCookie.allCases) { browser in
+                            Text(browser.displayName).tag(browser)
+                        }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+                    .frame(width: 100)
+                }
+                
+                if client.browserCookies != .none {
+                    Text("Please ensure you are logged in on the Default Profile.")
+                        .font(.system(size: 10))
+                        .foregroundColor(.secondary)
+                }
+            }
 
             VStack(alignment: .leading, spacing: 6) {
                 Text("Post-Processing")
@@ -603,18 +624,22 @@ struct LatteView: View {
                     .font(.system(size: 12))
             }
             
-            Toggle("Allow Window Dragging", isOn: $client.isWindowMovable)
-                .font(.system(size: 12))
+            HStack {
+                Toggle("Keep Window Open", isOn: $client.keepPanelOpen)
+                    .font(.system(size: 12))
+                Spacer()
+                Toggle("Allow Dragging", isOn: $client.isWindowMovable)
+                    .font(.system(size: 12))
+            }
             
             Divider().opacity(0.5)
             
-            // Format Priority Navigation
             VStack(alignment: .leading, spacing: 6) {
                 Text("Format Priority")
                     .font(.system(size: 10, weight: .medium))
                     .foregroundColor(.secondary)
                 HStack {
-                    Text("Reorder video and audio formats")
+                    Text("Show/hide and reorder formats")
                         .font(.system(size: 11))
                         .foregroundColor(.secondary)
                     Spacer()
@@ -664,14 +689,27 @@ struct LatteView: View {
                     Text("Video").font(.system(size: 11, weight: .medium)).foregroundColor(.secondary)
                     List {
                         ForEach(client.orderedVideoFormats) { fmt in
+                            let isHidden = client.hiddenVideoFormats.contains(fmt.id)
                             HStack {
-                                Text(fmt.displayName).font(.system(size: 11))
+                                Button(action: {
+                                    if isHidden { client.hiddenVideoFormats.removeAll { $0 == fmt.id } }
+                                    else { client.hiddenVideoFormats.append(fmt.id) }
+                                }) {
+                                    Image(systemName: isHidden ? "eye.slash" : "eye")
+                                        .foregroundColor(isHidden ? .secondary : client.appTheme.accentColor)
+                                        .frame(width: 16)
+                                }
+                                .buttonStyle(.plain)
+                                
+                                Text(fmt.displayName)
+                                    .font(.system(size: 11))
+                                    .foregroundColor(isHidden ? .secondary : .primary)
                                 Spacer()
                                 Image(systemName: "line.3.horizontal")
                                     .font(.system(size: 10))
                                     .foregroundColor(.secondary)
                             }
-                            .listRowInsets(EdgeInsets(top: 0, leading: 8, bottom: 0, trailing: 8))
+                            .listRowInsets(EdgeInsets(top: 0, leading: 6, bottom: 0, trailing: 6))
                         }
                         .onMove { indices, newOffset in
                             client.videoFormatOrder.move(fromOffsets: indices, toOffset: newOffset)
@@ -679,8 +717,7 @@ struct LatteView: View {
                     }
                     .listStyle(.plain)
                     .environment(\.defaultMinListRowHeight, 22)
-                    // Computes exactly to fit rows and strips out empty whitespace below
-                    .frame(height: CGFloat(client.orderedVideoFormats.count * 22))
+                    .frame(height: 250)
                     .scrollContentBackground(.hidden)
                     .background(Color.black.opacity(0.15))
                     .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.white.opacity(0.05), lineWidth: 1))
@@ -691,14 +728,27 @@ struct LatteView: View {
                     Text("Audio").font(.system(size: 11, weight: .medium)).foregroundColor(.secondary)
                     List {
                         ForEach(client.orderedAudioFormats) { fmt in
+                            let isHidden = client.hiddenAudioFormats.contains(fmt.id)
                             HStack {
-                                Text(fmt.displayName).font(.system(size: 11))
+                                Button(action: {
+                                    if isHidden { client.hiddenAudioFormats.removeAll { $0 == fmt.id } }
+                                    else { client.hiddenAudioFormats.append(fmt.id) }
+                                }) {
+                                    Image(systemName: isHidden ? "eye.slash" : "eye")
+                                        .foregroundColor(isHidden ? .secondary : client.appTheme.accentColor)
+                                        .frame(width: 16)
+                                }
+                                .buttonStyle(.plain)
+                                
+                                Text(fmt.displayName)
+                                    .font(.system(size: 11))
+                                    .foregroundColor(isHidden ? .secondary : .primary)
                                 Spacer()
                                 Image(systemName: "line.3.horizontal")
                                     .font(.system(size: 10))
                                     .foregroundColor(.secondary)
                             }
-                            .listRowInsets(EdgeInsets(top: 0, leading: 8, bottom: 0, trailing: 8))
+                            .listRowInsets(EdgeInsets(top: 0, leading: 6, bottom: 0, trailing: 6))
                         }
                         .onMove { indices, newOffset in
                             client.audioFormatOrder.move(fromOffsets: indices, toOffset: newOffset)
@@ -706,8 +756,7 @@ struct LatteView: View {
                     }
                     .listStyle(.plain)
                     .environment(\.defaultMinListRowHeight, 22)
-                    // Computes exactly to fit rows and strips out empty whitespace below
-                    .frame(height: CGFloat(client.orderedAudioFormats.count * 22))
+                    .frame(height: 250)
                     .scrollContentBackground(.hidden)
                     .background(Color.black.opacity(0.15))
                     .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.white.opacity(0.05), lineWidth: 1))
@@ -732,7 +781,6 @@ struct LatteView: View {
     }
 
     // MARK: - About Content
-
     private var aboutContent: some View {
         VStack(spacing: 12) {
             Text("About")
@@ -752,7 +800,6 @@ struct LatteView: View {
                     .foregroundColor(.secondary)
             }
             
-            // Check for Updates Button
             Button(action: {
                 if let url = updateURL {
                     NSWorkspace.shared.open(URL(string: url)!)
@@ -846,7 +893,6 @@ struct LatteView: View {
 }
 
 // MARK: - Thumbnail View
-
 struct ThumbnailView: View {
     let urlString: String?
     let width: CGFloat

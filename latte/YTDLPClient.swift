@@ -32,20 +32,44 @@ enum DownloadType: String, CaseIterable, Identifiable {
     }
 }
 
+enum BrowserCookie: String, CaseIterable, Identifiable {
+    case none = "none"
+    case chrome = "chrome"
+    case firefox = "firefox"
+    case edge = "edge"
+    case brave = "brave"
+
+    var id: String { rawValue }
+    var displayName: String {
+        switch self {
+        case .none: return "None"
+        case .chrome: return "Chrome"
+        case .firefox: return "Firefox"
+        case .edge: return "Edge"
+        case .brave: return "Brave"
+        }
+    }
+}
+
 struct VideoFormatOption: Identifiable, Hashable {
     let id: String
     let displayName: String
     let formatSpec: String
-    let requiresMerge: Bool
+    let mergeFormat: String?
 
     static let allOptions: [VideoFormatOption] = [
-        VideoFormatOption(id: "best", displayName: "Best Quality", formatSpec: "bv*+ba/b", requiresMerge: true),
-        VideoFormatOption(id: "best_mp4", displayName: "Best (MP4)", formatSpec: "bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/bv*+ba/b", requiresMerge: true),
-        VideoFormatOption(id: "1080p_mp4", displayName: "1080p (MP4)", formatSpec: "bv*[height<=1080][ext=mp4]+ba[ext=m4a]/b[height<=1080][ext=mp4]/bv*[height<=1080]+ba/b[height<=1080]", requiresMerge: true),
-        VideoFormatOption(id: "720p_mp4", displayName: "720p (MP4)", formatSpec: "bv*[height<=720][ext=mp4]+ba[ext=m4a]/b[height<=720][ext=mp4]/bv*[height<=720]+ba/b[height<=720]", requiresMerge: true),
-        VideoFormatOption(id: "480p_mp4", displayName: "480p (MP4)", formatSpec: "bv*[height<=480][ext=mp4]+ba[ext=m4a]/b[height<=480][ext=mp4]/bv*[height<=480]+ba/b[height<=480]", requiresMerge: true),
-        VideoFormatOption(id: "360p_mp4", displayName: "360p (MP4)", formatSpec: "bv*[height<=360][ext=mp4]+ba[ext=m4a]/b[height<=360][ext=mp4]/bv*[height<=360]+ba/b[height<=360]", requiresMerge: true),
-        VideoFormatOption(id: "worst", displayName: "Worst Quality", formatSpec: "w", requiresMerge: false),
+        VideoFormatOption(id: "best_mp4", displayName: "Best Quality (MP4)", formatSpec: "bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/bv*+ba/b", mergeFormat: "mp4"),
+        VideoFormatOption(id: "best", displayName: "Best Quality (MKV)", formatSpec: "bv*+ba/b", mergeFormat: "mkv"),
+        VideoFormatOption(id: "4k_mp4", displayName: "4K (MP4)", formatSpec: "bv*[height<=2160][ext=mp4]+ba[ext=m4a]/b[height<=2160][ext=mp4]/bv*[height<=2160]+ba/b[height<=2160]", mergeFormat: "mp4"),
+        VideoFormatOption(id: "4k_av1", displayName: "4K (AV1/MKV)", formatSpec: "bv*[height<=2160][vcodec~='^av01']+ba/b[height<=2160]", mergeFormat: "mkv"),
+        VideoFormatOption(id: "4k_webm", displayName: "4K (WebM)", formatSpec: "bv*[height<=2160][ext=webm]+ba/b[height<=2160]", mergeFormat: "webm"),
+        VideoFormatOption(id: "1440p_mp4", displayName: "1440p (MP4)", formatSpec: "bv*[height<=1440][ext=mp4]+ba[ext=m4a]/b[height<=1440][ext=mp4]/bv*[height<=1440]+ba/b[height<=1440]", mergeFormat: "mp4"),
+        VideoFormatOption(id: "1080p_mp4", displayName: "1080p (MP4)", formatSpec: "bv*[height<=1080][ext=mp4]+ba[ext=m4a]/b[height<=1080][ext=mp4]/bv*[height<=1080]+ba/b[height<=1080]", mergeFormat: "mp4"),
+        VideoFormatOption(id: "1080p_av1", displayName: "1080p (AV1/MKV)", formatSpec: "bv*[height<=1080][vcodec~='^av01']+ba/b[height<=1080]", mergeFormat: "mkv"),
+        VideoFormatOption(id: "1080p_webm", displayName: "1080p (WebM)", formatSpec: "bv*[height<=1080][ext=webm]+ba/b[height<=1080]", mergeFormat: "webm"),
+        VideoFormatOption(id: "720p_mp4", displayName: "720p (MP4)", formatSpec: "bv*[height<=720][ext=mp4]+ba[ext=m4a]/b[height<=720][ext=mp4]/bv*[height<=720]+ba/b[height<=720]", mergeFormat: "mp4"),
+        VideoFormatOption(id: "480p_mp4", displayName: "480p (MP4)", formatSpec: "bv*[height<=480][ext=mp4]+ba[ext=m4a]/b[height<=480][ext=mp4]/bv*[height<=480]+ba/b[height<=480]", mergeFormat: "mp4"),
+        VideoFormatOption(id: "360p_mp4", displayName: "360p (MP4)", formatSpec: "bv*[height<=360][ext=mp4]+ba[ext=m4a]/b[height<=360][ext=mp4]/bv*[height<=360]+ba/b[height<=360]", mergeFormat: "mp4")
     ]
 
     static func option(for id: String) -> VideoFormatOption {
@@ -62,12 +86,15 @@ struct AudioFormatOption: Identifiable, Hashable {
 
     static let allOptions: [AudioFormatOption] = [
         AudioFormatOption(id: "best_audio", displayName: "Best Audio", formatSpec: "ba/b", audioFormat: "best", audioQuality: "0"),
-        AudioFormatOption(id: "mp3_320", displayName: "MP3 (320k)", formatSpec: "ba/b", audioFormat: "mp3", audioQuality: "0"),
-        AudioFormatOption(id: "mp3_128", displayName: "MP3 (128k)", formatSpec: "ba/b", audioFormat: "mp3", audioQuality: "5"),
+        AudioFormatOption(id: "mp3_320", displayName: "MP3 (320k)", formatSpec: "ba/b", audioFormat: "mp3", audioQuality: "320K"),
+        AudioFormatOption(id: "mp3_256", displayName: "MP3 (256k)", formatSpec: "ba/b", audioFormat: "mp3", audioQuality: "256K"),
+        AudioFormatOption(id: "mp3_128", displayName: "MP3 (128k)", formatSpec: "ba/b", audioFormat: "mp3", audioQuality: "128K"),
         AudioFormatOption(id: "m4a_best", displayName: "M4A (AAC)", formatSpec: "ba[ext=m4a]/ba/b", audioFormat: "m4a", audioQuality: "0"),
-        AudioFormatOption(id: "opus_best", displayName: "OPUS", formatSpec: "ba[ext=webm]/ba/b", audioFormat: "opus", audioQuality: "0"),
+        AudioFormatOption(id: "alac", displayName: "ALAC", formatSpec: "ba/b", audioFormat: "alac", audioQuality: "0"),
         AudioFormatOption(id: "flac", displayName: "FLAC", formatSpec: "ba/b", audioFormat: "flac", audioQuality: "0"),
-        AudioFormatOption(id: "wav", displayName: "WAV", formatSpec: "ba/b", audioFormat: "wav", audioQuality: "0"),
+        AudioFormatOption(id: "opus_best", displayName: "OPUS", formatSpec: "ba[ext=webm]/ba/b", audioFormat: "opus", audioQuality: "0"),
+        AudioFormatOption(id: "vorbis", displayName: "Vorbis (Ogg)", formatSpec: "ba/b", audioFormat: "vorbis", audioQuality: "0"),
+        AudioFormatOption(id: "wav", displayName: "WAV", formatSpec: "ba/b", audioFormat: "wav", audioQuality: "0")
     ]
 
     static func option(for id: String) -> AudioFormatOption {
@@ -102,6 +129,10 @@ class YTDLPClient: ObservableObject {
         didSet { UserDefaults.standard.set(downloadType.rawValue, forKey: "downloadType") }
     }
     
+    @Published var browserCookies: BrowserCookie = BrowserCookie(rawValue: UserDefaults.standard.string(forKey: "browserCookies") ?? "none") ?? .none {
+        didSet { UserDefaults.standard.set(browserCookies.rawValue, forKey: "browserCookies") }
+    }
+    
     @Published var videoFormatOrder: [String] = UserDefaults.standard.stringArray(forKey: "videoFormatOrder") ?? VideoFormatOption.allOptions.map(\.id) {
         didSet { UserDefaults.standard.set(videoFormatOrder, forKey: "videoFormatOrder") }
     }
@@ -109,11 +140,38 @@ class YTDLPClient: ObservableObject {
         didSet { UserDefaults.standard.set(audioFormatOrder, forKey: "audioFormatOrder") }
     }
     
+    @Published var hiddenVideoFormats: [String] = UserDefaults.standard.stringArray(forKey: "hiddenVideoFormats") ?? [] {
+        didSet {
+            UserDefaults.standard.set(hiddenVideoFormats, forKey: "hiddenVideoFormats")
+            if !activeVideoFormats.contains(where: { $0.id == selectedVideoFormatId }), let first = activeVideoFormats.first {
+                selectedVideoFormatId = first.id
+            }
+        }
+    }
+    @Published var hiddenAudioFormats: [String] = UserDefaults.standard.stringArray(forKey: "hiddenAudioFormats") ?? [] {
+        didSet {
+            UserDefaults.standard.set(hiddenAudioFormats, forKey: "hiddenAudioFormats")
+            if !activeAudioFormats.contains(where: { $0.id == selectedAudioFormatId }), let first = activeAudioFormats.first {
+                selectedAudioFormatId = first.id
+            }
+        }
+    }
+    
     var orderedVideoFormats: [VideoFormatOption] {
         videoFormatOrder.compactMap { id in VideoFormatOption.allOptions.first(where: { $0.id == id }) }
     }
     var orderedAudioFormats: [AudioFormatOption] {
         audioFormatOrder.compactMap { id in AudioFormatOption.allOptions.first(where: { $0.id == id }) }
+    }
+    
+    var activeVideoFormats: [VideoFormatOption] {
+        let active = orderedVideoFormats.filter { !hiddenVideoFormats.contains($0.id) }
+        return active.isEmpty ? orderedVideoFormats : active
+    }
+    
+    var activeAudioFormats: [AudioFormatOption] {
+        let active = orderedAudioFormats.filter { !hiddenAudioFormats.contains($0.id) }
+        return active.isEmpty ? orderedAudioFormats : active
     }
     
     @Published var selectedVideoFormatId: String = UserDefaults.standard.string(forKey: "selectedVideoFormatId") ?? VideoFormatOption.allOptions[0].id {
@@ -174,6 +232,10 @@ class YTDLPClient: ObservableObject {
         didSet { UserDefaults.standard.set(writeSubtitles, forKey: "writeSubtitles") }
     }
 
+    @Published var keepPanelOpen: Bool = UserDefaults.standard.bool(forKey: "keepPanelOpen") {
+        didSet { UserDefaults.standard.set(keepPanelOpen, forKey: "keepPanelOpen") }
+    }
+
     @Published var isWindowMovable: Bool = UserDefaults.standard.bool(forKey: "isWindowMovable") {
         didSet {
             UserDefaults.standard.set(isWindowMovable, forKey: "isWindowMovable")
@@ -210,6 +272,25 @@ class YTDLPClient: ObservableObject {
         let homeDirectory = FileManager.default.homeDirectoryForCurrentUser
         latteDirectory = homeDirectory.appendingPathComponent(".latte")
         ytdlpPath = latteDirectory.appendingPathComponent("yt-dlp")
+        
+        let validVideoIds = Set(VideoFormatOption.allOptions.map(\.id))
+        videoFormatOrder = videoFormatOrder.filter { validVideoIds.contains($0) }
+        
+        let validAudioIds = Set(AudioFormatOption.allOptions.map(\.id))
+        audioFormatOrder = audioFormatOrder.filter { validAudioIds.contains($0) }
+        
+        let missingVideoIds = VideoFormatOption.allOptions.map(\.id).filter { !validVideoIds.intersection(Set(videoFormatOrder)).contains($0) }
+        if !missingVideoIds.isEmpty { videoFormatOrder.append(contentsOf: missingVideoIds) }
+
+        let missingAudioIds = AudioFormatOption.allOptions.map(\.id).filter { !validAudioIds.intersection(Set(audioFormatOrder)).contains($0) }
+        if !missingAudioIds.isEmpty { audioFormatOrder.append(contentsOf: missingAudioIds) }
+
+        if !activeVideoFormats.contains(where: { $0.id == selectedVideoFormatId }) {
+            selectedVideoFormatId = activeVideoFormats.first?.id ?? VideoFormatOption.allOptions[0].id
+        }
+        if !activeAudioFormats.contains(where: { $0.id == selectedAudioFormatId }) {
+            selectedAudioFormatId = activeAudioFormats.first?.id ?? AudioFormatOption.allOptions[0].id
+        }
 
         createDirectoryIfNeeded()
 
@@ -376,6 +457,7 @@ class YTDLPClient: ObservableObject {
 
         let safeYtdlpExe = self.ytdlpExecutable()
         let safeLatteDir = self.latteDirectory
+        let safeCookies = self.browserCookies
 
         Task.detached {
             let batchFile = safeLatteDir.appendingPathComponent("batch.txt")
@@ -385,28 +467,47 @@ class YTDLPClient: ObservableObject {
             let task = Process()
             task.executableURL = URL(fileURLWithPath: "/bin/bash")
 
-            let script = """
+            var script = """
             export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
-            "\(safeYtdlpExe)" --dump-single-json --flat-playlist --no-warnings -a "\(batchFile.path)" 2>&1
+            "\(safeYtdlpExe)" --dump-single-json --flat-playlist --no-warnings
             """
+            
+            if safeCookies != .none {
+                script += " --cookies-from-browser \(safeCookies.rawValue)"
+            }
+            
+            script += " -a \"\(batchFile.path)\""
+            
             task.arguments = ["-c", script]
 
-            let infoPipe = Pipe()
-            task.standardOutput = infoPipe
-            task.standardError = infoPipe
+            let stdOutPipe = Pipe()
+            let stdErrPipe = Pipe()
+            task.standardOutput = stdOutPipe
+            task.standardError = stdErrPipe
 
             var outputData = Data()
-            infoPipe.fileHandleForReading.readabilityHandler = { handle in
+            var errorData = Data()
+            
+            stdOutPipe.fileHandleForReading.readabilityHandler = { handle in
                 outputData.append(handle.availableData)
+            }
+            stdErrPipe.fileHandleForReading.readabilityHandler = { handle in
+                errorData.append(handle.availableData)
             }
 
             do {
                 try task.run()
                 task.waitUntilExit()
-                infoPipe.fileHandleForReading.readabilityHandler = nil
-                outputData.append(infoPipe.fileHandleForReading.readDataToEndOfFile())
+                
+                stdOutPipe.fileHandleForReading.readabilityHandler = nil
+                stdErrPipe.fileHandleForReading.readabilityHandler = nil
+                
+                outputData.append(stdOutPipe.fileHandleForReading.readDataToEndOfFile())
+                errorData.append(stdErrPipe.fileHandleForReading.readDataToEndOfFile())
 
                 let output = String(data: outputData, encoding: .utf8) ?? ""
+                let errOutput = String(data: errorData, encoding: .utf8) ?? ""
+                
                 let lines = output.components(separatedBy: .newlines).filter { $0.trimmingCharacters(in: .whitespaces).hasPrefix("{") }
                 
                 var aggregatedEntries: [VideoEntry] = []
@@ -434,14 +535,35 @@ class YTDLPClient: ObservableObject {
                     self.isFetchingInfo = false
 
                     if task.terminationStatus != 0 && aggregatedEntries.isEmpty {
-                        let errorLines = output.components(separatedBy: .newlines).filter { $0.localizedCaseInsensitiveContains("error") || $0.contains("ERROR") }
-                        let errorMsg = errorLines.first ?? "Unknown error"
-                        self.infoError = "Could not fetch info. \(errorMsg)"
+                        var errorMsg = errOutput.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if errorMsg.isEmpty { errorMsg = "Unknown error occurred." }
+                        
+                        let errLines = errorMsg.components(separatedBy: .newlines)
+                        var mainError = errLines.first(where: { $0.contains("ERROR:") }) ?? errLines.last ?? errorMsg
+                        let lowerError = mainError.lowercased()
+                        
+                        if lowerError.contains("account authentication is required") || lowerError.contains("sign in") || lowerError.contains("this content is unreachable") || lowerError.contains("authentication") || lowerError.contains("login") {
+                            mainError = "Authentication required. Ensure you are logged into \(safeCookies.displayName) (Default Profile)."
+                        } else if lowerError.contains("cannot parse data") {
+                            mainError = "Cannot parse data. This is a known yt-dlp limitation, often occurring with private Facebook videos."
+                        } else if lowerError.contains("database is locked") {
+                            mainError = "\(safeCookies.displayName) cookie database is locked. Try closing the browser and retry."
+                        }
+                        
+                        self.infoError = mainError
                         return
                     }
 
                     if aggregatedEntries.isEmpty {
-                        self.infoError = "No data received"
+                        if task.terminationStatus == 0 {
+                            // Succeeded but returned no standard JSON (e.g. some IG Stories)
+                            self.isPlaylist = false
+                            self.hasVideoInfo = true
+                            self.singleVideoTitle = "Media Ready to Download"
+                            self.singleVideoUploader = "Metadata unavailable"
+                        } else {
+                            self.infoError = "No data received"
+                        }
                         return
                     }
 
@@ -465,7 +587,8 @@ class YTDLPClient: ObservableObject {
     }
     
     nonisolated private func parseEntry(_ info: [String: Any]) -> VideoEntry {
-        let entryTitle = info["title"] as? String ?? "Unknown"
+        let t = info["title"] as? String
+        let entryTitle = (t?.isEmpty == false) ? t! : (info["id"] as? String ?? "Media Ready to Download")
         let webpageUrl = info["webpage_url"] as? String ?? info["url"] as? String ?? ""
 
         var thumbnail: String? = nil
@@ -494,7 +617,10 @@ class YTDLPClient: ObservableObject {
     private func parseSingleVideo(info: [String: Any]) {
         hasVideoInfo = true
         isPlaylist = false
-        singleVideoTitle = info["title"] as? String ?? "Unknown"
+        
+        let t = info["title"] as? String
+        singleVideoTitle = (t?.isEmpty == false) ? t! : "Media Ready to Download"
+        
         singleVideoUploader = info["uploader"] as? String
         singleVideoDuration = info["duration"] as? Int
 
@@ -554,6 +680,7 @@ class YTDLPClient: ObservableObject {
 
         let formatOpt: VideoFormatOption = VideoFormatOption.option(for: selectedVideoFormatId)
         let audioOpt: AudioFormatOption = AudioFormatOption.option(for: selectedAudioFormatId)
+        let bCookies = self.browserCookies
         let dlType = self.downloadType
         let eThumb = self.embedThumbnail
         let eMeta = self.embedMetadata
@@ -578,11 +705,15 @@ class YTDLPClient: ObservableObject {
                 cd "\(targetFolder)"
                 "\(ytdlp)" --no-warnings --newline --progress
                 """
+                
+                if bCookies != .none {
+                    command += " --cookies-from-browser \(bCookies.rawValue)"
+                }
 
                 if dlType == .video {
                     command += " -f '\(formatOpt.formatSpec)'"
-                    if formatOpt.requiresMerge {
-                        command += " --merge-output-format mp4"
+                    if let mFormat = formatOpt.mergeFormat {
+                        command += " --merge-output-format \(mFormat)"
                     }
                 } else {
                     command += " -f '\(audioOpt.formatSpec)' -x --audio-format \(audioOpt.audioFormat) --audio-quality \(audioOpt.audioQuality)"
@@ -598,11 +729,14 @@ class YTDLPClient: ObservableObject {
                 args.append(command)
                 task.arguments = args
 
-                let dlPipe = Pipe()
-                task.standardOutput = dlPipe
-                task.standardError = dlPipe
+                let stdOutPipe = Pipe()
+                let stdErrPipe = Pipe()
+                task.standardOutput = stdOutPipe
+                task.standardError = stdErrPipe
 
-                dlPipe.fileHandleForReading.readabilityHandler = { handle in
+                var lastErrorLine = ""
+                
+                stdOutPipe.fileHandleForReading.readabilityHandler = { handle in
                     let data = handle.availableData
                     guard data.count > 0, let str = String(data: data, encoding: .utf8) else { return }
 
@@ -625,19 +759,37 @@ class YTDLPClient: ObservableObject {
                         }
                     }
                 }
+                
+                stdErrPipe.fileHandleForReading.readabilityHandler = { handle in
+                    let data = handle.availableData
+                    guard data.count > 0, let str = String(data: data, encoding: .utf8) else { return }
+                    let lines = str.components(separatedBy: .newlines).filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+                    if let last = lines.last {
+                        lastErrorLine = last
+                    }
+                }
 
                 do {
                     try task.run()
                     task.waitUntilExit()
-                    dlPipe.fileHandleForReading.readabilityHandler = nil
+                    
+                    stdOutPipe.fileHandleForReading.readabilityHandler = nil
+                    stdErrPipe.fileHandleForReading.readabilityHandler = nil
 
                     if task.terminationStatus == 0 {
                         completedCount += 1
                     } else {
-                        let errorData = dlPipe.fileHandleForReading.readDataToEndOfFile()
-                        let errorStr = String(data: errorData, encoding: .utf8) ?? "Unknown error"
+                        let fallbackError = lastErrorLine.isEmpty ? "Unknown error occurred" : lastErrorLine
+                        let lowerError = fallbackError.lowercased()
+                        
                         await MainActor.run {
-                            self.downloadError = "Download failed: \(String(errorStr.prefix(100)))"
+                            if lowerError.contains("unreachable") || lowerError.contains("authentication") || lowerError.contains("sign in") {
+                                self.downloadError = "Authentication failed. Make sure you are logged into \(bCookies.displayName)."
+                            } else if lowerError.contains("cannot parse data") {
+                                self.downloadError = "Cannot parse data. This is a known yt-dlp limitation with some private videos."
+                            } else {
+                                self.downloadError = "Failed: \(fallbackError.prefix(100))"
+                            }
                         }
                         break
                     }
@@ -690,6 +842,8 @@ class YTDLPClient: ObservableObject {
     func resetFormatOrders() {
         videoFormatOrder = VideoFormatOption.allOptions.map(\.id)
         audioFormatOrder = AudioFormatOption.allOptions.map(\.id)
+        hiddenVideoFormats = []
+        hiddenAudioFormats = []
     }
 
     func formatDuration(_ seconds: Int) -> String {
