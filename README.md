@@ -11,6 +11,10 @@
   </p>
 </p>
 
+<p align="center">
+  <a href="./README.md">English</a> | <a href="./README-ZH.md">中文文档</a>
+</p>
+
 ---
 
 **latte** is a lightweight, ultra-fast video and audio downloader for macOS that lives entirely in your menu bar. Built natively with SwiftUI, it allows you to download media from thousands of popular websites instantly—without opening a browser tab, dealing with ads, or navigating complex command-line tools.
