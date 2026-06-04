@@ -120,7 +120,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     func showPanel() {
         if !floatingPanel.isMovableByWindowBackground {
-            let screenRect = NSScreen.main?.visibleFrame ?? .zero
+            // Anchor to whichever screen the menu bar icon was clicked on,
+            // not always the main display (fixes multi-monitor placement).
+            let targetScreen = screenForStatusItem()
+            let screenRect = targetScreen.visibleFrame
             var frame = floatingPanel.frame
 
             if let button = statusItem?.button, let buttonWindow = button.window {
@@ -130,7 +133,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 frame.origin.x = screenRect.maxX - frame.width - 10
             }
 
-            frame.origin.x = max(10, frame.origin.x)
+            // Clamp within the target screen's bounds rather than the global origin.
+            let minX = screenRect.minX + 10
+            let maxX = screenRect.maxX - frame.width - 10
+            frame.origin.x = min(max(minX, frame.origin.x), maxX)
             frame.origin.y = screenRect.maxY - frame.height
 
             floatingPanel.setFrame(frame, display: true)
@@ -138,6 +144,22 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         floatingPanel.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    /// The screen the status bar icon currently lives on. With "Displays have
+    /// separate Spaces" enabled the icon appears on every menu bar, so we use
+    /// the mouse location at click time (and the icon's own window as a
+    /// fallback) to find the display the user actually interacted with.
+    private func screenForStatusItem() -> NSScreen {
+        let mouse = NSEvent.mouseLocation
+        if let screen = NSScreen.screens.first(where: { NSMouseInRect(mouse, $0.frame, false) }) {
+            return screen
+        }
+        if let window = statusItem?.button?.window,
+           let screen = NSScreen.screens.first(where: { $0.frame.intersects(window.frame) }) {
+            return screen
+        }
+        return NSScreen.main ?? NSScreen.screens.first ?? NSScreen()
     }
 
     func hidePanel() {
