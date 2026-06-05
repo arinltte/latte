@@ -129,7 +129,6 @@ latte 由 [yt-dlp](https://github.com/yt-dlp/yt-dlp) 驱动，支持从 **1800+*
 - **直播平台**：Twitch, YouTube Live, Kick, Steam Community
 - **播客与电台**：Apple Podcasts, Spotify, Stitcher, iHeartRadio
 
-你可以在应用内的 **设置 → 支持的网站** 中查看完整列表。
 获取最新、最全的支持列表，请参阅 [yt-dlp 支持的网站文档](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md)。
 
 ---
