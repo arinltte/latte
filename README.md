@@ -130,8 +130,6 @@ latte is powered by [yt-dlp](https://github.com/yt-dlp/yt-dlp) and supports down
 - **Live streams**: Twitch, YouTube Live, Kick, Steam Community
 - **Podcasts & radio**: Apple Podcasts, Spotify, Stitcher, iHeartRadio
 
-And many more. You can also view the full list directly within the app under **Settings → Supported Sites**.
-
 For the complete and always up-to-date list, see the [yt-dlp supported sites](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md) documentation.
 
 ---
