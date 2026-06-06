@@ -465,20 +465,16 @@ class YTDLPClient: ObservableObject {
             try? urlsString.write(to: batchFile, atomically: true, encoding: .utf8)
 
             let task = Process()
-            task.executableURL = URL(fileURLWithPath: "/bin/bash")
-
-            var script = """
-            export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
-            "\(safeYtdlpExe)" --dump-single-json --flat-playlist --no-warnings
-            """
+            task.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+            task.environment = self.processEnvironment()
+            var arguments = [safeYtdlpExe, "--dump-single-json", "--flat-playlist", "--no-warnings"]
             
             if safeCookies != .none {
-                script += " --cookies-from-browser \(safeCookies.rawValue)"
+                arguments += ["--cookies-from-browser", safeCookies.rawValue]
             }
             
-            script += " -a \"\(batchFile.path)\""
-            
-            task.arguments = ["-c", script]
+            arguments += ["-a", batchFile.path]
+            task.arguments = arguments
 
             let stdOutPipe = Pipe()
             let stdErrPipe = Pipe()
@@ -614,6 +610,13 @@ class YTDLPClient: ObservableObject {
         return "yt-dlp"
     }
 
+    nonisolated private func processEnvironment() -> [String: String] {
+        var environment = ProcessInfo.processInfo.environment
+        let existingPath = environment["PATH"] ?? "/usr/bin:/bin:/usr/sbin:/sbin"
+        environment["PATH"] = "/opt/homebrew/bin:/usr/local/bin:\(existingPath)"
+        return environment
+    }
+
     private func parseSingleVideo(info: [String: Any]) {
         hasVideoInfo = true
         isPlaylist = false
@@ -697,36 +700,30 @@ class YTDLPClient: ObservableObject {
                 let task = Process()
                 await MainActor.run { self.currentDownloadProcess = task }
                 
-                task.executableURL = URL(fileURLWithPath: "/bin/bash")
-
-                var args = ["-c"]
-                var command = """
-                export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
-                cd "\(targetFolder)"
-                "\(ytdlp)" --no-warnings --newline --progress
-                """
+                task.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+                task.environment = self.processEnvironment()
+                task.currentDirectoryURL = URL(fileURLWithPath: targetFolder)
+                var args = [ytdlp, "--no-warnings", "--newline", "--progress"]
                 
                 if bCookies != .none {
-                    command += " --cookies-from-browser \(bCookies.rawValue)"
+                    args += ["--cookies-from-browser", bCookies.rawValue]
                 }
 
                 if dlType == .video {
-                    command += " -f '\(formatOpt.formatSpec)'"
+                    args += ["-f", formatOpt.formatSpec]
                     if let mFormat = formatOpt.mergeFormat {
-                        command += " --merge-output-format \(mFormat)"
+                        args += ["--merge-output-format", mFormat]
                     }
                 } else {
-                    command += " -f '\(audioOpt.formatSpec)' -x --audio-format \(audioOpt.audioFormat) --audio-quality \(audioOpt.audioQuality)"
+                    args += ["-f", audioOpt.formatSpec, "-x", "--audio-format", audioOpt.audioFormat, "--audio-quality", audioOpt.audioQuality]
                 }
 
-                if eThumb { command += " --embed-thumbnail" }
-                if eMeta { command += " --embed-metadata" }
-                if wSubs { command += " --write-subs --embed-subs" }
+                if eThumb { args.append("--embed-thumbnail") }
+                if eMeta { args.append("--embed-metadata") }
+                if wSubs { args += ["--write-subs", "--embed-subs"] }
 
-                command += " -o '%(title)s [%(id)s].%(ext)s'"
-                command += " '\(url)'"
+                args += ["-o", "%(title)s [%(id)s].%(ext)s", url]
 
-                args.append(command)
                 task.arguments = args
 
                 let stdOutPipe = Pipe()
