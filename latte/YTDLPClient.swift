@@ -465,20 +465,17 @@ class YTDLPClient: ObservableObject {
             try? urlsString.write(to: batchFile, atomically: true, encoding: .utf8)
 
             let task = Process()
-            task.executableURL = URL(fileURLWithPath: "/bin/bash")
-
-            var script = """
-            export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
-            "\(safeYtdlpExe)" --dump-single-json --flat-playlist --no-warnings
-            """
-            
-            if safeCookies != .none {
-                script += " --cookies-from-browser \(safeCookies.rawValue)"
-            }
-            
-            script += " -a \"\(batchFile.path)\""
-            
-            task.arguments = ["-c", script]
+                        task.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+                        task.environment = self.processEnvironment()
+                        
+                        var arguments = [safeYtdlpExe, "--dump-single-json", "--flat-playlist", "--no-warnings"]
+                        
+                        if safeCookies != .none {
+                            arguments += ["--cookies-from-browser", safeCookies.rawValue]
+                        }
+                        arguments += ["-a", batchFile.path]
+                        
+                        task.arguments = arguments
 
             let stdOutPipe = Pipe()
             let stdErrPipe = Pipe()
@@ -607,12 +604,19 @@ class YTDLPClient: ObservableObject {
     }
 
     nonisolated private func ytdlpExecutable() -> String {
-        let fm = FileManager.default
-        if fm.isExecutableFile(atPath: ytdlpPath.path) {
-            return ytdlpPath.path
+            let fm = FileManager.default
+            if fm.isExecutableFile(atPath: ytdlpPath.path) {
+                return ytdlpPath.path
+            }
+            return "yt-dlp"
         }
-        return "yt-dlp"
-    }
+
+        nonisolated private func processEnvironment() -> [String: String] {
+            var environment = ProcessInfo.processInfo.environment
+            let existingPath = environment["PATH"] ?? "/usr/bin:/bin:/usr/sbin:/sbin"
+            environment["PATH"] = "/opt/homebrew/bin:/usr/local/bin:\(existingPath)"
+            return environment
+        }
 
     private func parseSingleVideo(info: [String: Any]) {
         hasVideoInfo = true
@@ -695,39 +699,33 @@ class YTDLPClient: ObservableObject {
                 if Task.isCancelled { break }
 
                 let task = Process()
-                await MainActor.run { self.currentDownloadProcess = task }
-                
-                task.executableURL = URL(fileURLWithPath: "/bin/bash")
+                                await MainActor.run { self.currentDownloadProcess = task }
+                                
+                                task.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+                                task.environment = self.processEnvironment()
+                                task.currentDirectoryURL = URL(fileURLWithPath: targetFolder)
 
-                var args = ["-c"]
-                var command = """
-                export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
-                cd "\(targetFolder)"
-                "\(ytdlp)" --no-warnings --newline --progress
-                """
-                
-                if bCookies != .none {
-                    command += " --cookies-from-browser \(bCookies.rawValue)"
-                }
+                                var arguments = [ytdlp, "--no-warnings", "--newline", "--progress"]
+                                
+                                if bCookies != .none {
+                                    arguments += ["--cookies-from-browser", bCookies.rawValue]
+                                }
 
-                if dlType == .video {
-                    command += " -f '\(formatOpt.formatSpec)'"
-                    if let mFormat = formatOpt.mergeFormat {
-                        command += " --merge-output-format \(mFormat)"
-                    }
-                } else {
-                    command += " -f '\(audioOpt.formatSpec)' -x --audio-format \(audioOpt.audioFormat) --audio-quality \(audioOpt.audioQuality)"
-                }
+                                if dlType == .video {
+                                    arguments += ["-f", formatOpt.formatSpec]
+                                    if let mFormat = formatOpt.mergeFormat {
+                                        arguments += ["--merge-output-format", mFormat]
+                                    }
+                                } else {
+                                    arguments += ["-f", audioOpt.formatSpec, "-x", "--audio-format", audioOpt.audioFormat, "--audio-quality", audioOpt.audioQuality]
+                                }
 
-                if eThumb { command += " --embed-thumbnail" }
-                if eMeta { command += " --embed-metadata" }
-                if wSubs { command += " --write-subs --embed-subs" }
+                                if eThumb { arguments.append("--embed-thumbnail") }
+                                if eMeta { arguments.append("--embed-metadata") }
+                                if wSubs { arguments += ["--write-subs", "--embed-subs"] }
 
-                command += " -o '%(title)s [%(id)s].%(ext)s'"
-                command += " '\(url)'"
-
-                args.append(command)
-                task.arguments = args
+                                arguments += ["-o", "%(title)s [%(id)s].%(ext)s", url]
+                                task.arguments = arguments
 
                 let stdOutPipe = Pipe()
                 let stdErrPipe = Pipe()
