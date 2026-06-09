@@ -14,6 +14,7 @@ struct LatteView: View {
     @State private var showSettings: Bool = false
     @State private var showAbout: Bool = false
     @State private var showFormatPriority: Bool = false
+    @State private var isPanelVisible: Bool = false
     
     @FocusState private var isInputFocused: Bool
     @State private var isMultipleLinksCollapsed: Bool = false
@@ -67,10 +68,13 @@ struct LatteView: View {
         .animation(.easeInOut(duration: 0.2), value: showAbout)
         .animation(.easeInOut(duration: 0.2), value: showFormatPriority)
         .tint(client.appTheme.accentColor)
-        .background(AmbientThemeBackground(theme: client.appTheme))
+        .background(AmbientThemeBackground(theme: client.appTheme, isActive: isPanelVisible))
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .onAppear {
             isInputFocused = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .panelVisibilityChanged)) { notification in
+            isPanelVisible = notification.userInfo?["value"] as? Bool ?? false
         }
     }
 

@@ -85,6 +85,7 @@ struct ThemePalette {
 
 struct AmbientThemeBackground: View {
     let theme: AppTheme
+    let isActive: Bool
     @State private var p1 = false
     @State private var p2 = false
     @State private var running = false
@@ -95,7 +96,7 @@ struct AmbientThemeBackground: View {
             Rectangle()
                 .fill(.ultraThinMaterial)
 
-            if let palette = theme.palette {
+            if let palette = theme.palette, isActive {
                 RadialGradient(
                     gradient: Gradient(colors: palette.centerDark),
                     center: .center, startRadius: 0, endRadius: 260
@@ -125,25 +126,55 @@ struct AmbientThemeBackground: View {
             }
         }
         .onAppear {
-            guard !running, let speed = theme.palette?.animationSpeed else { return }
-            running = true
-            
-            withAnimation(
-                .easeInOut(duration: speed)
-                .repeatForever(autoreverses: true)
-            ) { p1 = true }
-            
-            DispatchQueue.main.asyncAfter(deadline: .now() + speed * 0.5) {
-                guard running else { return }
-                withAnimation(
-                    .easeInOut(duration: speed * 1.3)
-                    .repeatForever(autoreverses: true)
-                ) { p2 = true }
-            }
+            setAnimationActive(isActive)
+        }
+        .onChange(of: isActive) { _, active in
+            setAnimationActive(active)
+        }
+        .onChange(of: theme) { _, _ in
+            stopAnimation()
+            setAnimationActive(isActive)
         }
         .onDisappear {
-            // Stop all Core Animation work when panel is hidden
-            running = false
+            setAnimationActive(false)
+        }
+    }
+
+    private func setAnimationActive(_ active: Bool) {
+        if active {
+            startAnimationIfNeeded()
+        } else {
+            stopAnimation()
+        }
+    }
+
+    private func startAnimationIfNeeded() {
+        guard let speed = theme.palette?.animationSpeed else {
+            stopAnimation()
+            return
+        }
+        guard !running else { return }
+        running = true
+
+        withAnimation(
+            .easeInOut(duration: speed)
+            .repeatForever(autoreverses: true)
+        ) { p1 = true }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + speed * 0.5) {
+            guard running else { return }
+            withAnimation(
+                .easeInOut(duration: speed * 1.3)
+                .repeatForever(autoreverses: true)
+            ) { p2 = true }
+        }
+    }
+
+    private func stopAnimation() {
+        running = false
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
             p1 = false
             p2 = false
         }
