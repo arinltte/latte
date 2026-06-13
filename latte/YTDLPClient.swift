@@ -9,6 +9,7 @@ import Foundation
 import Combine
 import AppKit
 import SwiftUI
+import CryptoKit
 
 // MARK: - Enums
 
@@ -370,23 +371,20 @@ class YTDLPClient: ObservableObject {
                 self.setupProgressText = "Installing fast backend (yt-dlp)…"
             }
 
-            let installTask = Process()
-            installTask.executableURL = URL(fileURLWithPath: "/bin/bash")
-            
-            let script = """
-            mkdir -p "\(self.latteDirectory.path)"
-            cd "\(self.latteDirectory.path)"
-            curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos -o yt-dlp 2>/dev/null
-            chmod a+x yt-dlp
-            ./yt-dlp --version
-            """
-            installTask.arguments = ["-c", script]
+            // Create directory safely without shell interpolation
+            try? fm.createDirectory(at: self.latteDirectory, withIntermediateDirectories: true)
 
-            let setupPipe = Pipe()
-            installTask.standardOutput = setupPipe
-            installTask.standardError = setupPipe
+            // Step 1: Download yt-dlp binary using Process with explicit arguments (no shell interpolation)
+            let curlTask = Process()
+            curlTask.executableURL = URL(fileURLWithPath: "/usr/bin/curl")
+            curlTask.arguments = ["-L", "-o", self.ytdlpPath.path, "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos"]
+            curlTask.currentDirectoryURL = self.latteDirectory
 
-            setupPipe.fileHandleForReading.readabilityHandler = { handle in
+            let curlPipe = Pipe()
+            curlTask.standardOutput = curlPipe
+            curlTask.standardError = curlPipe
+
+            curlPipe.fileHandleForReading.readabilityHandler = { handle in
                 let data = handle.availableData
                 if data.count > 0, let str = String(data: data, encoding: .utf8) {
                     let lines = str.components(separatedBy: .newlines).filter { !$0.isEmpty }
@@ -397,17 +395,59 @@ class YTDLPClient: ObservableObject {
             }
 
             do {
-                try installTask.run()
-                installTask.waitUntilExit()
-                setupPipe.fileHandleForReading.readabilityHandler = nil
+                try curlTask.run()
+                curlTask.waitUntilExit()
+                curlPipe.fileHandleForReading.readabilityHandler = nil
+
+                guard curlTask.terminationStatus == 0,
+                      fm.fileExists(atPath: self.ytdlpPath.path) else {
+                    await MainActor.run {
+                        self.setupState = .error
+                        self.setupProgressText = "Download failed. Check internet connection."
+                    }
+                    return
+                }
+
+                // Step 2: Verify binary integrity — check it's a valid Mach-O or universal binary
+                if let binaryData = fm.contents(atPath: self.ytdlpPath.path) {
+                    let magicBytes = binaryData.prefix(4)
+                    let validMagics: [Data] = [
+                        Data([0xCF, 0xFA, 0xED, 0xFE]), // Mach-O 64-bit
+                        Data([0xCE, 0xFA, 0xED, 0xFE]), // Mach-O 32-bit
+                        Data([0xCA, 0xFE, 0xBA, 0xBE]), // Universal binary
+                        Data([0x23, 0x21, 0x2F, 0x75])  // Shebang (#!/u)
+                    ]
+                    let isValid = validMagics.contains(where: { Data(magicBytes) == $0 })
+                    if !isValid {
+                        try? fm.removeItem(at: self.ytdlpPath)
+                        await MainActor.run {
+                            self.setupState = .error
+                            self.setupProgressText = "Downloaded binary failed integrity check. Please retry."
+                        }
+                        return
+                    }
+                }
+
+                // Step 3: Make executable
+                try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: self.ytdlpPath.path)
+
+                // Step 4: Verify it runs
+                let versionTask = Process()
+                versionTask.executableURL = self.ytdlpPath
+                versionTask.arguments = ["--version"]
+                let versionPipe = Pipe()
+                versionTask.standardOutput = versionPipe
+                versionTask.standardError = FileHandle.nullDevice
+                try versionTask.run()
+                versionTask.waitUntilExit()
 
                 await MainActor.run {
-                    if installTask.terminationStatus == 0 {
+                    if versionTask.terminationStatus == 0 {
                         self.setupState = .ready
                         self.setupProgressText = "Ready"
                     } else {
                         self.setupState = .error
-                        self.setupProgressText = "Installation failed. Check internet connection."
+                        self.setupProgressText = "Installation failed. Binary verification failed."
                     }
                 }
             } catch {
@@ -428,15 +468,28 @@ class YTDLPClient: ObservableObject {
         }
     }
 
+    /// Validates that a string is a well-formed HTTP(S) URL safe to pass to yt-dlp.
+    nonisolated private func isValidURL(_ string: String) -> Bool {
+        guard let url = URL(string: string),
+              let scheme = url.scheme?.lowercased(),
+              (scheme == "http" || scheme == "https"),
+              url.host != nil else {
+            return false
+        }
+        // Reject strings that could be interpreted as yt-dlp flags
+        if string.hasPrefix("-") { return false }
+        return true
+    }
+
     func extractURLs() -> [String] {
         if isMultipleLinks {
             return urlText
                 .components(separatedBy: .newlines)
                 .map { $0.trimmingCharacters(in: .whitespaces) }
-                .filter { $0.hasPrefix("http://") || $0.hasPrefix("https://") }
+                .filter { isValidURL($0) }
         } else {
             let trimmed = urlText.trimmingCharacters(in: .whitespacesAndNewlines)
-            if trimmed.hasPrefix("http://") || trimmed.hasPrefix("https://") {
+            if isValidURL(trimmed) {
                 return [trimmed]
             }
             return []
@@ -460,15 +513,17 @@ class YTDLPClient: ObservableObject {
         let safeCookies = self.browserCookies
 
         Task.detached {
-            let batchFile = safeLatteDir.appendingPathComponent("batch.txt")
+            // Use a unique filename to prevent TOCTOU race conditions
+            let batchFile = safeLatteDir.appendingPathComponent("batch-\(UUID().uuidString).txt")
             let urlsString = urls.joined(separator: "\n")
             try? urlsString.write(to: batchFile, atomically: true, encoding: .utf8)
+            defer { try? FileManager.default.removeItem(at: batchFile) }
 
             let task = Process()
                         task.executableURL = URL(fileURLWithPath: "/usr/bin/env")
                         task.environment = self.processEnvironment()
                         
-                        var arguments = [safeYtdlpExe, "--dump-single-json", "--flat-playlist", "--no-warnings"]
+                        var arguments = [safeYtdlpExe, "--dump-single-json", "--flat-playlist", "--no-warnings", "--no-exec"]
                         
                         if safeCookies != .none {
                             arguments += ["--cookies-from-browser", safeCookies.rawValue]
@@ -705,7 +760,7 @@ class YTDLPClient: ObservableObject {
                                 task.environment = self.processEnvironment()
                                 task.currentDirectoryURL = URL(fileURLWithPath: targetFolder)
 
-                                var arguments = [ytdlp, "--no-warnings", "--newline", "--progress"]
+                                var arguments = [ytdlp, "--no-warnings", "--newline", "--progress", "--no-exec", "--restrict-filenames"]
                                 
                                 if bCookies != .none {
                                     arguments += ["--cookies-from-browser", bCookies.rawValue]
@@ -724,7 +779,7 @@ class YTDLPClient: ObservableObject {
                                 if eMeta { arguments.append("--embed-metadata") }
                                 if wSubs { arguments += ["--write-subs", "--embed-subs"] }
 
-                                arguments += ["-o", "%(title)s [%(id)s].%(ext)s", url]
+                                arguments += ["-P", targetFolder, "-o", "%(title).200s [%(id)s].%(ext)s", url]
                                 task.arguments = arguments
 
                 let stdOutPipe = Pipe()

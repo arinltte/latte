@@ -6,7 +6,7 @@
   <p align="center">
     <a href="https://github.com/arinltte/latte/releases/latest"><img src="https://img.shields.io/github/v/release/arinltte/latte?style=flat-square&color=blue" alt="Latest Release" /></a>
     <a href="https://github.com/arinltte/latte/blob/main/LICENSE"><img src="https://img.shields.io/github/license/arinltte/latte?style=flat-square&color=green" alt="License" /></a>
-    <img src="https://img.shields.io/badge/macOS-14.0%2B-blue?style=flat-square" alt="macOS" />
+    <img src="https://img.shields.io/badge/macOS-14.0%2B%20(incl.%2015%20Sequoia)-blue?style=flat-square" alt="macOS" />
     <img src="https://img.shields.io/badge/app%20memory-%3C50MB-brightgreen?style=flat-square" alt="Memory" />
   </p>
 </p>
@@ -39,7 +39,7 @@
 
 ## Requirements
 
-- macOS 14 (Sonoma) or later.
+- macOS 14 (Sonoma) or later, including macOS 15 (Sequoia).
 - **ffmpeg** is recommended for merging high-quality video/audio formats and converting to specific audio types.
   - Install via Homebrew: `brew install ffmpeg`
 
@@ -114,6 +114,19 @@ rm -rf ~/Library/Application\ Support/com.arinltte.latte 2>/dev/null
 rm -rf ~/Library/Saved\ Application\ State/com.arinltte.latte.savedState 2>/dev/null
 killall cfprefsd
 ```
+
+---
+
+## 🔒 Security Model
+
+latte runs **without App Sandbox** to enable its core features (executing the `yt-dlp` backend, reading browser cookies for authentication). This is a deliberate tradeoff:
+
+- The `yt-dlp` binary is downloaded from the official GitHub releases and **verified with magic-byte integrity checks** before being made executable.
+- All user-supplied URLs are **validated** (scheme, host, format) before being passed to the backend.
+- Download filenames are **restricted** to prevent path traversal attacks.
+- **No data** is transmitted externally beyond the yt-dlp download and video fetching.
+
+If you have security concerns, you can audit the source code or build from source.
 
 ---
 

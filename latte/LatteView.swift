@@ -801,14 +801,17 @@ struct LatteView: View {
             }
             
             Button(action: {
-                if let url = updateURL {
-                    NSWorkspace.shared.open(URL(string: url)!)
+                if let urlString = updateURL, let url = URL(string: urlString) {
+                    NSWorkspace.shared.open(url)
                     return
                 }
                 updateStatus = "Checking..."
                 Task {
                     do {
-                        let reqURL = URL(string: "https://github.com/arinltte/latte/releases/latest")!
+                        guard let reqURL = URL(string: "https://github.com/arinltte/latte/releases/latest") else {
+                            updateStatus = "Check for Updates"
+                            return
+                        }
                         var request = URLRequest(url: reqURL)
                         request.httpMethod = "HEAD"
                         let (_, response) = try await URLSession.shared.data(for: request)
@@ -816,10 +819,17 @@ struct LatteView: View {
                             .trimmingCharacters(in: .whitespaces)
                             .trimmingCharacters(in: CharacterSet(charactersIn: "v"))
 
+                        // Validate tag looks like a semantic version (e.g. "1.2.3" or "0.2.0")
+                        let versionPattern = #"^\d+\.\d+\.\d+$"#
+                        guard tag.range(of: versionPattern, options: .regularExpression) != nil else {
+                            updateStatus = "Check for Updates"
+                            return
+                        }
+
                         let current = (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "0.1.0"
                         let isNewer = tag.compare(current, options: .numeric) == .orderedDescending
 
-                        if !tag.isEmpty && isNewer {
+                        if isNewer {
                             updateStatus = "New Version Released (v\(tag))"
                             updateURL = "https://github.com/arinltte/latte/releases/latest"
                         } else {
@@ -923,10 +933,22 @@ struct ThumbnailView: View {
     }
 
     private func loadThumbnail() {
-        guard let urlString = urlString, let url = URL(string: urlString) else { return }
+        guard let urlString = urlString,
+              let url = URL(string: urlString),
+              let scheme = url.scheme?.lowercased(),
+              scheme == "https" else { return }
+
         Task.detached {
             do {
-                let (data, _) = try await URLSession.shared.data(from: url)
+                let (data, response) = try await URLSession.shared.data(from: url)
+                // Limit thumbnail size to 5MB to prevent memory exhaustion
+                guard data.count <= 5 * 1024 * 1024 else { return }
+                // Validate content type is an image
+                if let httpResponse = response as? HTTPURLResponse,
+                   let contentType = httpResponse.value(forHTTPHeaderField: "Content-Type"),
+                   !contentType.hasPrefix("image/") {
+                    return
+                }
                 if let image = NSImage(data: data) {
                     Task { @MainActor in self.loadedImage = image }
                 }
