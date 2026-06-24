@@ -19,11 +19,13 @@ struct latte: App {
 extension Notification.Name {
     static let windowMovableChanged = Notification.Name("windowMovableChanged")
     static let menuBarIconChanged = Notification.Name("menuBarIconChanged")
+    static let panelVisibilityChanged = Notification.Name("panelVisibilityChanged")
 }
 
 class AppDelegate: NSObject, NSApplicationDelegate {
     var statusItem: NSStatusItem?
     var floatingPanel: FloatingPanel!
+    var hostingView: NSHostingView<LatteView>?
     var globalEventMonitor: Any?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -61,11 +63,19 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             defer: false
         )
 
-        let contentView = LatteView(onClose: { [weak self] in
-            self?.hidePanel()
-        })
+        floatingPanel.contentView = nil
+    }
 
-        floatingPanel.contentView = NSHostingView(rootView: contentView)
+    func ensurePanelContent() {
+        if hostingView == nil {
+            let contentView = LatteView(onClose: { [weak self] in
+                self?.hidePanel()
+            })
+            hostingView = NSHostingView(rootView: contentView)
+        }
+        if floatingPanel.contentView == nil {
+            floatingPanel.contentView = hostingView
+        }
     }
 
     func setupNotifications() {
@@ -119,6 +129,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func showPanel() {
+        ensurePanelContent()
+
         if !floatingPanel.isMovableByWindowBackground {
             let screenRect = NSScreen.main?.visibleFrame ?? .zero
             var frame = floatingPanel.frame
@@ -138,9 +150,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         floatingPanel.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+        NotificationCenter.default.post(name: .panelVisibilityChanged, object: nil, userInfo: ["value": true])
     }
 
     func hidePanel() {
         floatingPanel.orderOut(nil)
+        NotificationCenter.default.post(name: .panelVisibilityChanged, object: nil, userInfo: ["value": false])
+        floatingPanel.contentView = nil
     }
 }
