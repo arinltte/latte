@@ -14,23 +14,21 @@ struct LatteView: View {
     @State private var showSettings: Bool = false
     @State private var showAbout: Bool = false
     @State private var showFormatPriority: Bool = false
-    @State private var isPanelVisible: Bool = false
+    @State private var isPanelVisible: Bool = true
     
     @FocusState private var isInputFocused: Bool
     @State private var isMultipleLinksCollapsed: Bool = false
-    
-    @State private var updateStatus: String = "Check for Updates"
-    @State private var updateURL: String? = nil
 
     private let baseWindowWidth: CGFloat = 380
     
+    // To ensure that enough and consistent height for the section
     private var dynamicWindowHeight: CGFloat {
         if showFormatPriority {
-            return 480
+            let maxCount = max(client.orderedVideoFormats.count, client.orderedAudioFormats.count)
+            return CGFloat(maxCount * 22) + 140
         }
-        if showSettings || showAbout {
-            return 410 // Adjusted for removed Safari warning height
-        }
+        // Increased height to safely fit the new Settings typography spacing
+        if showSettings || showAbout { return 460 }
         let expandList = client.isPlaylist && !client.videoEntries.isEmpty
         return expandList ? 460 : 360
     }
@@ -69,10 +67,8 @@ struct LatteView: View {
         .animation(.easeInOut(duration: 0.2), value: showFormatPriority)
         .tint(client.appTheme.accentColor)
         .background(AmbientThemeBackground(theme: client.appTheme, isActive: isPanelVisible))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .onAppear {
-            isInputFocused = true
-        }
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .onAppear { isInputFocused = true }
         .onReceive(NotificationCenter.default.publisher(for: .panelVisibilityChanged)) { notification in
             isPanelVisible = notification.userInfo?["value"] as? Bool ?? false
         }
@@ -85,13 +81,13 @@ struct LatteView: View {
             if client.setupState == .installing || client.setupState == .checking {
                 ProgressView().scaleEffect(0.8)
                 Text(client.setupState == .checking ? "Checking Environment…" : "Initial Setup in Progress")
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(size: 13, weight: .medium))
             } else if client.setupState == .error {
                 Image(systemName: "exclamationmark.triangle.fill")
                     .foregroundColor(.red)
                     .font(.system(size: 24))
                 Text("Setup Failed")
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(size: 13, weight: .medium))
             }
             Text(client.setupProgressText)
                 .font(.system(size: 11, design: .monospaced))
@@ -102,10 +98,7 @@ struct LatteView: View {
             if client.setupState == .error {
                 HStack(spacing: 12) {
                     Button("Exit") { NSApplication.shared.terminate(nil) }.controlSize(.small)
-                    Button("Retry") {
-                        let c = client
-                        c.runSetupScript()
-                    }.controlSize(.small)
+                    Button("Retry") { client.runSetupScript() }.controlSize(.small)
                 }
             }
         }
@@ -116,15 +109,31 @@ struct LatteView: View {
     // MARK: - Main Content
 
     private var mainContent: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            urlInputSection
+        VStack(alignment: .leading, spacing: 14) {
+            
+            HStack(alignment: .top, spacing: 10) {
+                urlInputSection
+                
+                Button(action: { client.keepPanelOpen.toggle() }) {
+                    Image(systemName: client.keepPanelOpen ? "pin.fill" : "pin")
+                        .font(.system(size: 14))
+                        .foregroundColor(client.keepPanelOpen ? client.appTheme.accentColor : .secondary)
+                        .frame(width: 28, height: 28)
+                        .background(client.keepPanelOpen ? client.appTheme.accentColor.opacity(0.15) : Color.clear)
+                        .cornerRadius(6)
+                }
+                // ensure that the pin button doesn't moved down when the multiple link is selected
+                .buttonStyle(.plain)
+                .help(client.keepPanelOpen ? "Unpin Window" : "Pin Window Open")
+                .padding(.trailing, 12)
+                .padding(.top, client.isMultipleLinks ? 6 : 6)
+            }
 
+            // To add more padding to the tick box
             HStack {
                 Toggle(isOn: Binding(
                     get: { client.isMultipleLinks },
-                    set: { val in
-                        Task { @MainActor in client.isMultipleLinks = val; client.clearState() }
-                    }
+                    set: { val in Task { @MainActor in client.isMultipleLinks = val; client.clearState() } }
                 )) {
                     Text("Multiple Links")
                         .font(.system(size: 11))
@@ -132,20 +141,20 @@ struct LatteView: View {
                 .toggleStyle(.checkbox)
                 Spacer()
             }
-            .padding(.horizontal, 12)
+            .padding(.horizontal, 14)
 
             formatSelectionSection
 
             videoInfoSection
 
             if let error = client.infoError {
-                HStack(alignment: .top, spacing: 4) {
-                    Image(systemName: "exclamationmark.triangle")
-                        .font(.system(size: 9))
-                        .foregroundColor(.orange)
-                        .padding(.top, 2)
-                    Text(error)
+                HStack(alignment: .top, spacing: 6) {
+                    Image(systemName: "exclamationmark.triangle.fill")
                         .font(.system(size: 10))
+                        .foregroundColor(.orange)
+                        .padding(.top, 1)
+                    Text(error)
+                        .font(.system(size: 11))
                         .foregroundColor(.orange)
                         .lineLimit(4)
                         .fixedSize(horizontal: false, vertical: true)
@@ -158,7 +167,7 @@ struct LatteView: View {
 
             downloadSection
         }
-        .padding(.top, 12)
+        .padding(.top, 10)
         .padding(.bottom, 8)
     }
 
@@ -170,20 +179,20 @@ struct LatteView: View {
                 ZStack(alignment: .topTrailing) {
                     ZStack(alignment: .topLeading) {
                         if client.urlText.isEmpty {
+                            // To match the hint text and cursor perfectly
                             Text("Paste video links (one per line)…")
-                                .foregroundColor(.secondary.opacity(0.6))
+                                .foregroundColor(Color(NSColor.placeholderTextColor))
                                 .font(.system(size: 13))
-                                .padding(.leading, 9)
-                                .padding(.top, 8)
+                                // ALIGN PLACEHOLDER WITH CURSOR
+                                .padding(.leading, 5) // Shift left/right
+                                .padding(.top, 0)     // Shift up/down
                         }
                         TextEditor(text: $client.urlText)
                             .font(.system(size: 13))
                             .scrollContentBackground(.hidden)
                     }
-                    .padding(.leading, 4)
-                    .padding(.vertical, 8)
-                    .padding(.trailing, 22)
-                    .frame(height: isMultipleLinksCollapsed ? 60 : 88)
+                    .padding(4)
+                    .frame(height: isMultipleLinksCollapsed ? 56 : 88)
                     
                     Button(action: { withAnimation { isMultipleLinksCollapsed.toggle() } }) {
                         Image(systemName: isMultipleLinksCollapsed ? "chevron.down" : "chevron.up")
@@ -196,9 +205,11 @@ struct LatteView: View {
                     .buttonStyle(.plain)
                     .padding(8)
                 }
-                .background(Color.black.opacity(0.15))
+                .background(Color(NSColor.controlBackgroundColor).opacity(0.5))
                 .cornerRadius(8)
-                .padding(.horizontal, 12)
+                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(NSColor.separatorColor), lineWidth: 1))
+                .padding(.leading, 12)
+                .padding(.top, 12)
             } else {
                 HStack(spacing: 8) {
                     TextField("Paste video link here…", text: $client.urlText)
@@ -207,9 +218,7 @@ struct LatteView: View {
                         .focused($isInputFocused)
 
                     if !client.urlText.isEmpty {
-                        Button(action: {
-                            client.urlText = ""
-                        }) {
+                        Button(action: { client.urlText = "" }) {
                             Image(systemName: "xmark.circle.fill")
                                 .font(.system(size: 12))
                                 .foregroundColor(.secondary)
@@ -217,8 +226,8 @@ struct LatteView: View {
                         .buttonStyle(.plain)
                     }
                 }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 4)
+                .padding(.leading, 12)
+                .padding(.vertical, 10)
             }
         }
         .onChange(of: client.urlText) { _, newValue in
@@ -279,12 +288,13 @@ struct LatteView: View {
 
             if !client.ffmpegAvailable {
                 Image(systemName: "exclamationmark.triangle")
-                    .font(.system(size: 10))
+                    .font(.system(size: 11))
                     .foregroundColor(.orange)
                     .help("ffmpeg not found. Merging/converting may not work.")
             }
         }
-        .padding(.horizontal, 12)
+        .padding(.leading, 10)
+        .padding(.trailing, 12)
     }
 
     // MARK: - Video Info Section
@@ -292,10 +302,10 @@ struct LatteView: View {
     private var videoInfoSection: some View {
         Group {
             if client.isFetchingInfo {
-                HStack(spacing: 6) {
-                    ProgressView().scaleEffect(0.6)
+                HStack(spacing: 8) {
+                    ProgressView().scaleEffect(0.5)
                     Text("Fetching info…")
-                        .font(.system(size: 11))
+                        .font(.system(size: 12))
                         .foregroundColor(.secondary)
                     Spacer()
                 }
@@ -309,18 +319,18 @@ struct LatteView: View {
     }
 
     private var singleVideoView: some View {
-        HStack(alignment: .top, spacing: 10) {
-            ThumbnailView(urlString: client.singleVideoThumbnail, width: 110, height: 62)
+        HStack(alignment: .top, spacing: 12) {
+            ThumbnailView(urlString: client.singleVideoThumbnail, width: 100, height: 56)
                 .cornerRadius(6)
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 3) {
                 Text(client.singleVideoTitle)
                     .font(.system(size: 12, weight: .medium))
                     .lineLimit(2)
 
                 if let uploader = client.singleVideoUploader {
                     Text(uploader)
-                        .font(.system(size: 10))
+                        .font(.system(size: 11))
                         .foregroundColor(.secondary)
                         .lineLimit(1)
                 }
@@ -331,16 +341,34 @@ struct LatteView: View {
                         .foregroundColor(.secondary)
                 }
             }
+            
             Spacer()
+            
+            if client.singleVideoThumbnail != nil {
+                Button(action: { client.downloadThumbnailOnly() }) {
+                    Image(systemName: "photo.badge.arrow.down")
+                        .font(.system(size: 14))
+                        .foregroundColor(client.appTheme.accentColor)
+                        .frame(width: 28, height: 28)
+                        .background(Color(NSColor.controlBackgroundColor).opacity(0.5))
+                        .cornerRadius(6)
+                }
+                .buttonStyle(.plain)
+                .help("Download Thumbnail Only")
+            }
         }
+        .padding(8)
+        .background(Color(NSColor.windowBackgroundColor).opacity(0.3))
+        .cornerRadius(8)
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(NSColor.separatorColor), lineWidth: 0.5))
         .padding(.horizontal, 12)
     }
 
     private var playlistView: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 6) {
             HStack {
                 Text(client.playlistTitle)
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.system(size: 12, weight: .medium))
                     .lineLimit(1)
 
                 Spacer()
@@ -355,31 +383,34 @@ struct LatteView: View {
                     }
                 }) {
                     Text(selectedCount == totalCount ? "Deselect All" : "Select All")
-                        .font(.system(size: 9, weight: .medium))
+                        .font(.system(size: 10))
                         .foregroundColor(.secondary)
                 }
                 .buttonStyle(.plain)
 
                 Text("\(selectedCount)/\(totalCount)")
-                    .font(.system(size: 9, design: .monospaced))
+                    .font(.system(size: 10, design: .monospaced))
                     .foregroundColor(.secondary)
             }
-            .padding(.horizontal, 12)
 
             ScrollView {
-                LazyVStack(spacing: 2) {
+                LazyVStack(spacing: 4) {
                     ForEach(client.videoEntries.indices, id: \.self) { index in
                         playlistItemRow(index: index)
                     }
                 }
-                .padding(.horizontal, 12)
             }
             .frame(maxHeight: .infinity)
         }
+        .padding(8)
+        .background(Color(NSColor.windowBackgroundColor).opacity(0.3))
+        .cornerRadius(8)
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(NSColor.separatorColor), lineWidth: 0.5))
+        .padding(.horizontal, 12)
     }
 
     private func playlistItemRow(index: Int) -> some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 8) {
             Toggle("", isOn: Binding(
                 get: { client.videoEntries[index].isSelected },
                 set: { client.videoEntries[index].isSelected = $0 }
@@ -387,12 +418,12 @@ struct LatteView: View {
             .toggleStyle(.checkbox)
             .labelsHidden()
 
-            ThumbnailView(urlString: client.videoEntries[index].thumbnailURL, width: 56, height: 32)
-                .cornerRadius(3)
+            ThumbnailView(urlString: client.videoEntries[index].thumbnailURL, width: 48, height: 28)
+                .cornerRadius(4)
 
-            VStack(alignment: .leading, spacing: 1) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(client.videoEntries[index].title)
-                    .font(.system(size: 10))
+                    .font(.system(size: 11))
                     .lineLimit(1)
 
                 if let duration = client.videoEntries[index].duration {
@@ -403,85 +434,69 @@ struct LatteView: View {
             }
             Spacer()
         }
-        .padding(.vertical, 1)
+        .padding(.vertical, 2)
     }
 
     // MARK: - Download Section
 
     private var downloadSection: some View {
-        VStack(spacing: 6) {
+        VStack(spacing: 8) {
             if client.downloadCompleted {
                 HStack(spacing: 4) {
-                    Image(systemName: "checkmark.circle.fill").font(.system(size: 10)).foregroundColor(Color.green.opacity(0.8))
-                    Text("Saved to \(client.downloadFolder)")
-                        .font(.system(size: 10)).foregroundColor(Color.green.opacity(0.8)).lineLimit(1)
+                    Image(systemName: "checkmark.circle.fill").foregroundColor(.green)
+                    Text(client.downloadProgressText.contains("Thumbnail") ? "Thumbnail saved" : "Saved to \(client.downloadFolder)").foregroundColor(.green).lineLimit(1)
                     Spacer()
                 }
+                .font(.system(size: 11))
                 .padding(.horizontal, 12)
             }
             
             if let error = client.downloadError {
                 HStack(spacing: 4) {
-                    Image(systemName: "xmark.circle.fill").font(.system(size: 10)).foregroundColor(.red)
-                    Text(error).font(.system(size: 10)).foregroundColor(.red).lineLimit(2)
+                    Image(systemName: "xmark.circle.fill").foregroundColor(.red)
+                    Text(error).foregroundColor(.red).lineLimit(3)
                     Spacer()
                 }
+                .font(.system(size: 11))
                 .padding(.horizontal, 12)
             }
 
             if client.isDownloading {
-                HStack(spacing: 8) {
-                    Button(action: {
-                        let c = client
-                        c.stopDownload()
-                    }) {
-                        HStack(spacing: 4) {
-                            Image(systemName: "stop.circle.fill").font(.system(size: 12))
-                            Text("Stop").font(.system(size: 12, weight: .semibold))
-                        }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(Color.red.opacity(0.2))
-                        .foregroundColor(.red)
-                        .cornerRadius(6)
+                HStack(spacing: 12) {
+                    Button(action: { client.stopDownload() }) {
+                        Image(systemName: "stop.fill")
+                            .font(.system(size: 14))
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.borderedProminent)
+                    .tint(.red)
+                    .controlSize(.large)
 
-                    VStack(alignment: .leading, spacing: 1) {
+                    VStack(alignment: .leading, spacing: 4) {
                         ProgressView(value: client.downloadPercent)
                             .progressViewStyle(.linear)
-                            .frame(height: 4)
                         Text(client.downloadProgressText)
-                            .font(.system(size: 9))
+                            .font(.system(size: 10))
                             .foregroundColor(.secondary)
                             .lineLimit(1)
                     }
 
                     Text("\(Int(client.downloadPercent * 100))%")
-                        .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                        .font(.system(size: 12, weight: .medium, design: .monospaced))
                         .foregroundColor(.secondary)
-                        .frame(width: 36, alignment: .trailing)
+                        .frame(width: 40, alignment: .trailing)
                 }
                 .padding(.horizontal, 12)
             } else {
-                Button(action: {
-                    let c = client
-                    c.startDownload()
-                }) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "arrow.down.circle.fill")
-                            .font(.system(size: 14))
-                        Text("Download")
-                            .font(.system(size: 13, weight: .semibold))
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 8)
-                    .background(client.hasValidURL ? client.appTheme.accentColor : Color.gray.opacity(0.3))
-                    .foregroundColor(.white)
-                    .cornerRadius(8)
+                Button(action: { client.startDownload() }) {
+                    Text("Download")
+                        .font(.system(size: 14, weight: .semibold))
+                        .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.plain)
-                .disabled(!client.hasValidURL)
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .tint(client.canDownload ? client.appTheme.accentColor : Color(NSColor.unemphasizedSelectedContentBackgroundColor))
+                .foregroundColor(client.canDownload ? .white : Color(NSColor.disabledControlTextColor))
+                .disabled(!client.canDownload)
                 .padding(.horizontal, 12)
             }
         }
@@ -493,45 +508,43 @@ struct LatteView: View {
         HStack {
             Button(action: {
                 withAnimation(.easeInOut(duration: 0.15)) {
-                    if showFormatPriority {
-                        showFormatPriority = false
-                    } else if showAbout {
-                        showAbout = false
-                    } else {
-                        showSettings.toggle()
-                    }
+                    if showFormatPriority { showFormatPriority = false }
+                    else if showAbout { showAbout = false }
+                    else { showSettings.toggle() }
                 }
             }) {
-                Image(systemName: (showSettings || showAbout || showFormatPriority) ? "chevron.left" : "gearshape")
-                    .font(.system(size: 11))
-                    .foregroundColor(.secondary)
-                    .frame(width: 40, alignment: .leading)
+                ZStack(alignment: .topTrailing) {
+                    Image(systemName: (showSettings || showAbout || showFormatPriority) ? "chevron.left" : "gearshape")
+                        .font(.system(size: 13))
+                        .foregroundColor(client.hasUpdateAvailable ? .orange : .secondary)
+                    
+                    if client.hasUpdateAvailable && !(showSettings || showAbout || showFormatPriority) {
+                        Circle().fill(Color.red).frame(width: 5, height: 5).offset(x: 4, y: -2)
+                    }
+                }
+                .frame(width: 30, alignment: .leading)
             }
             .buttonStyle(.plain)
 
             Spacer()
 
-            Button(action: {
-                NSWorkspace.shared.open(URL(fileURLWithPath: client.downloadFolder))
-            }) {
+            Button(action: { NSWorkspace.shared.open(URL(fileURLWithPath: client.downloadFolder)) }) {
                 Image(systemName: "folder")
-                    .font(.system(size: 11))
+                    .font(.system(size: 13))
                     .foregroundColor(.secondary)
-                    .frame(width: 40)
             }
             .buttonStyle(.plain)
 
             Spacer()
 
             Button("Exit") { NSApplication.shared.terminate(nil) }
-                .font(.system(size: 11))
+                .font(.system(size: 12))
                 .foregroundColor(.secondary)
                 .buttonStyle(.plain)
-                .frame(width: 40, alignment: .trailing)
+                .frame(width: 30, alignment: .trailing)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-        .frame(height: 28)
+        .padding(.horizontal, 16)
+        .frame(height: 36)
     }
 
     // MARK: - Bottom Bar (Back Only)
@@ -545,58 +558,61 @@ struct LatteView: View {
                 }
             }) {
                 Image(systemName: "chevron.left")
-                    .font(.system(size: 12))
+                    .font(.system(size: 13))
                     .foregroundColor(.secondary)
                     .frame(width: 40, alignment: .leading)
             }
             .buttonStyle(.plain)
-
             Spacer()
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-        .frame(height: 28)
+        .padding(.horizontal, 16)
+        .frame(height: 36)
     }
 
     // MARK: - Settings Content
 
     private var settingsContent: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 16) {
             HStack {
                 Text("Settings")
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.system(size: 15, weight: .semibold))
                 Spacer()
                 Button(action: { withAnimation { showAbout = true } }) {
-                    Image(systemName: "info.circle")
-                        .font(.system(size: 14))
-                        .foregroundColor(.secondary)
+                    ZStack(alignment: .topTrailing) {
+                        Image(systemName: "info.circle")
+                            .font(.system(size: 14))
+                            .foregroundColor(client.hasUpdateAvailable ? .orange : .secondary)
+                        
+                        if client.hasUpdateAvailable {
+                            Circle().fill(Color.red).frame(width: 5, height: 5).offset(x: 3, y: -1)
+                        }
+                    }
                 }
                 .buttonStyle(.plain)
             }
 
             VStack(alignment: .leading, spacing: 4) {
                 Text("Download Folder")
-                    .font(.system(size: 10, weight: .medium))
+                    .font(.system(size: 11, weight: .medium))
                     .foregroundColor(.secondary)
                 HStack {
                     Text(client.downloadFolder)
-                        .font(.system(size: 11, design: .monospaced))
+                        .font(.system(size: 12, design: .monospaced))
                         .lineLimit(1)
                         .truncationMode(.middle)
                     Spacer()
                     Button("Choose") { chooseDownloadFolder() }
-                        .font(.system(size: 10))
                         .controlSize(.small)
                 }
             }
             
             VStack(alignment: .leading, spacing: 6) {
                 Text("Authentication (For Restricted Sites)")
-                    .font(.system(size: 10, weight: .medium))
+                    .font(.system(size: 11, weight: .medium))
                     .foregroundColor(.secondary)
                 HStack {
                     Text("Browser Cookies")
-                        .font(.system(size: 12))
+                        .font(.system(size: 13))
                     Spacer()
                     Picker("", selection: $client.browserCookies) {
                         ForEach(BrowserCookie.allCases) { browser in
@@ -605,52 +621,46 @@ struct LatteView: View {
                     }
                     .labelsHidden()
                     .pickerStyle(.menu)
-                    .frame(width: 100)
+                    .frame(width: 120)
                 }
                 
                 if client.browserCookies != .none {
                     Text("Please ensure you are logged in on the Default Profile.")
-                        .font(.system(size: 10))
+                        .font(.system(size: 11))
                         .foregroundColor(.secondary)
                 }
             }
 
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 8) {
                 Text("Post-Processing")
-                    .font(.system(size: 10, weight: .medium))
+                    .font(.system(size: 11, weight: .medium))
                     .foregroundColor(.secondary)
 
                 Toggle("Embed Thumbnail", isOn: $client.embedThumbnail)
-                    .font(.system(size: 12))
+                    .font(.system(size: 13))
                 Toggle("Embed Metadata", isOn: $client.embedMetadata)
-                    .font(.system(size: 12))
+                    .font(.system(size: 13))
                 Toggle("Download Subtitles", isOn: $client.writeSubtitles)
-                    .font(.system(size: 12))
+                    .font(.system(size: 13))
             }
             
-            HStack {
-                Toggle("Keep Window Open", isOn: $client.keepPanelOpen)
-                    .font(.system(size: 12))
-                Spacer()
-                Toggle("Allow Dragging", isOn: $client.isWindowMovable)
-                    .font(.system(size: 12))
-            }
+            Toggle("Allow Window Dragging", isOn: $client.isWindowMovable)
+                .font(.system(size: 13))
             
             Divider().opacity(0.5)
             
             VStack(alignment: .leading, spacing: 6) {
                 Text("Format Priority")
-                    .font(.system(size: 10, weight: .medium))
+                    .font(.system(size: 11, weight: .medium))
                     .foregroundColor(.secondary)
                 HStack {
                     Text("Show/hide and reorder formats")
-                        .font(.system(size: 11))
+                        .font(.system(size: 12))
                         .foregroundColor(.secondary)
                     Spacer()
                     Button("Edit") {
                         withAnimation { showFormatPriority = true }
                     }
-                    .font(.system(size: 10))
                     .controlSize(.small)
                 }
             }
@@ -661,7 +671,7 @@ struct LatteView: View {
                         .font(.system(size: 11))
                         .foregroundColor(.orange)
                     Text("ffmpeg not found. Install via: brew install ffmpeg")
-                        .font(.system(size: 10))
+                        .font(.system(size: 11))
                         .foregroundColor(.orange)
                         .lineLimit(2)
                 }
@@ -669,28 +679,24 @@ struct LatteView: View {
 
             Spacer(minLength: 0)
         }
-        .padding(14)
+        .padding(16)
     }
 
     // MARK: - Format Priority Content
 
     private var formatPriorityContent: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 12) {
             HStack {
                 Text("Format Priority")
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.system(size: 15, weight: .semibold))
                 Spacer()
-                Button("Reset") {
-                    client.resetFormatOrders()
-                }
-                .font(.system(size: 11))
-                .controlSize(.small)
+                Button("Reset") { client.resetFormatOrders() }
+                    .controlSize(.small)
             }
-            .padding(.bottom, 4)
 
             HStack(spacing: 12) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Video").font(.system(size: 11, weight: .medium)).foregroundColor(.secondary)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Video").font(.system(size: 12, weight: .medium)).foregroundColor(.secondary)
                     List {
                         ForEach(client.orderedVideoFormats) { fmt in
                             let isHidden = client.hiddenVideoFormats.contains(fmt.id)
@@ -706,14 +712,14 @@ struct LatteView: View {
                                 .buttonStyle(.plain)
                                 
                                 Text(fmt.displayName)
-                                    .font(.system(size: 11))
+                                    .font(.system(size: 12))
                                     .foregroundColor(isHidden ? .secondary : .primary)
                                 Spacer()
                                 Image(systemName: "line.3.horizontal")
                                     .font(.system(size: 10))
                                     .foregroundColor(.secondary)
                             }
-                            .listRowInsets(EdgeInsets(top: 0, leading: 6, bottom: 0, trailing: 6))
+                            .listRowInsets(EdgeInsets(top: 0, leading: 8, bottom: 0, trailing: 8))
                         }
                         .onMove { indices, newOffset in
                             client.videoFormatOrder.move(fromOffsets: indices, toOffset: newOffset)
@@ -721,15 +727,15 @@ struct LatteView: View {
                     }
                     .listStyle(.plain)
                     .environment(\.defaultMinListRowHeight, 22)
-                    .frame(height: 250)
+                    .frame(height: CGFloat(client.orderedVideoFormats.count * 22))
                     .scrollContentBackground(.hidden)
-                    .background(Color.black.opacity(0.15))
-                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.white.opacity(0.05), lineWidth: 1))
+                    .background(Color(NSColor.controlBackgroundColor).opacity(0.5))
+                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color(NSColor.separatorColor), lineWidth: 1))
                     .cornerRadius(6)
                 }
 
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Audio").font(.system(size: 11, weight: .medium)).foregroundColor(.secondary)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Audio").font(.system(size: 12, weight: .medium)).foregroundColor(.secondary)
                     List {
                         ForEach(client.orderedAudioFormats) { fmt in
                             let isHidden = client.hiddenAudioFormats.contains(fmt.id)
@@ -745,14 +751,14 @@ struct LatteView: View {
                                 .buttonStyle(.plain)
                                 
                                 Text(fmt.displayName)
-                                    .font(.system(size: 11))
+                                    .font(.system(size: 12))
                                     .foregroundColor(isHidden ? .secondary : .primary)
                                 Spacer()
                                 Image(systemName: "line.3.horizontal")
                                     .font(.system(size: 10))
                                     .foregroundColor(.secondary)
                             }
-                            .listRowInsets(EdgeInsets(top: 0, leading: 6, bottom: 0, trailing: 6))
+                            .listRowInsets(EdgeInsets(top: 0, leading: 8, bottom: 0, trailing: 8))
                         }
                         .onMove { indices, newOffset in
                             client.audioFormatOrder.move(fromOffsets: indices, toOffset: newOffset)
@@ -760,16 +766,16 @@ struct LatteView: View {
                     }
                     .listStyle(.plain)
                     .environment(\.defaultMinListRowHeight, 22)
-                    .frame(height: 250)
+                    .frame(height: CGFloat(client.orderedAudioFormats.count * 22))
                     .scrollContentBackground(.hidden)
-                    .background(Color.black.opacity(0.15))
-                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.white.opacity(0.05), lineWidth: 1))
+                    .background(Color(NSColor.controlBackgroundColor).opacity(0.5))
+                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color(NSColor.separatorColor), lineWidth: 1))
                     .cornerRadius(6)
                 }
             }
             Spacer(minLength: 0)
         }
-        .padding(14)
+        .padding(16)
     }
 
     private func chooseDownloadFolder() {
@@ -786,70 +792,45 @@ struct LatteView: View {
 
     // MARK: - About Content
     private var aboutContent: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 16) {
             Text("About")
-                .font(.system(size: 14, weight: .semibold))
+                .font(.system(size: 15, weight: .semibold))
 
-            VStack(spacing: 3) {
+            VStack(spacing: 4) {
                 if let nsImage = NSImage(named: "AppIcon") {
                     Image(nsImage: nsImage)
                         .resizable()
-                        .frame(width: 56, height: 56)
-                        .cornerRadius(12)
+                        .frame(width: 64, height: 64)
+                        .cornerRadius(14)
                 }
                 Text(Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String ?? "Latte")
-                    .font(.system(size: 13, weight: .bold))
+                    .font(.system(size: 14, weight: .bold))
                 Text("Version \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0")")
-                    .font(.system(size: 10))
+                    .font(.system(size: 11))
                     .foregroundColor(.secondary)
             }
             
             Button(action: {
-                if let url = updateURL {
-                    NSWorkspace.shared.open(URL(string: url)!)
-                    return
-                }
-                updateStatus = "Checking..."
-                Task {
-                    do {
-                        let reqURL = URL(string: "https://github.com/arinltte/latte/releases/latest")!
-                        var request = URLRequest(url: reqURL)
-                        request.httpMethod = "HEAD"
-                        let (_, response) = try await URLSession.shared.data(for: request)
-                        let tag = (response.url?.lastPathComponent ?? "")
-                            .trimmingCharacters(in: .whitespaces)
-                            .trimmingCharacters(in: CharacterSet(charactersIn: "v"))
-
-                        let current = (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "0.1.0"
-                        let isNewer = tag.compare(current, options: .numeric) == .orderedDescending
-
-                        if !tag.isEmpty && isNewer {
-                            updateStatus = "New Version Released (v\(tag))"
-                            updateURL = "https://github.com/arinltte/latte/releases/latest"
-                        } else {
-                            updateStatus = "Up to Date"
-                        }
-                    } catch {
-                        updateStatus = "Check for Updates"
-                    }
+                if let url = URL(string: "https://github.com/arinltte/latte/releases/latest") {
+                    NSWorkspace.shared.open(url)
                 }
             }) {
-                Text(updateStatus)
-                    .font(.system(size: 11))
-                    .foregroundColor(updateURL != nil ? .white : nil)
-                    .padding(.horizontal, updateURL != nil ? 8 : 0)
-                    .padding(.vertical, updateURL != nil ? 3 : 0)
-                    .background(updateURL != nil ? client.appTheme.accentColor : Color.clear)
-                    .cornerRadius(4)
+                Text(client.hasUpdateAvailable ? "Download New Version (v\(client.updateVersionTag ?? ""))" : "Up to Date")
+                    .font(.system(size: 12))
+                    .foregroundColor(client.hasUpdateAvailable ? .white : nil)
+                    .padding(.horizontal, client.hasUpdateAvailable ? 10 : 0)
+                    .padding(.vertical, client.hasUpdateAvailable ? 4 : 0)
+                    .background(client.hasUpdateAvailable ? client.appTheme.accentColor : Color.clear)
+                    .cornerRadius(6)
             }
-            .controlSize(.small)
-            .disabled(updateStatus == "Checking..." || updateStatus == "Up to Date")
+            .controlSize(.regular)
+            .disabled(!client.hasUpdateAvailable)
 
             Divider().opacity(0.5)
 
             HStack {
                 Text("Menu Bar Icon")
-                    .font(.system(size: 12, weight: .medium))
+                    .font(.system(size: 13, weight: .medium))
                 Spacer()
                 Picker("", selection: $client.menuBarIcon) {
                     Text("⬇ Arrow").tag("arrow.down.circle.fill")
@@ -867,7 +848,7 @@ struct LatteView: View {
             
             HStack {
                 Text("Theme")
-                    .font(.system(size: 12, weight: .medium))
+                    .font(.system(size: 13, weight: .medium))
                 Spacer()
                 Picker("", selection: $client.appTheme) {
                     ForEach(AppTheme.allCases) { theme in
@@ -880,19 +861,19 @@ struct LatteView: View {
 
             Spacer(minLength: 0)
 
-            VStack(spacing: 1) {
+            VStack(spacing: 2) {
                 Text("2026 Developed by [arinltte](https://github.com/arinltte)")
-                    .font(.system(size: 10))
+                    .font(.system(size: 11))
                     .foregroundColor(.secondary)
                     .tint(client.appTheme.accentColor)
 
                 Text("cjshen00@gmail.com")
-                    .font(.system(size: 10))
+                    .font(.system(size: 11))
                     .foregroundColor(.secondary)
             }
             .multilineTextAlignment(.center)
         }
-        .padding(14)
+        .padding(16)
     }
 }
 
@@ -912,11 +893,11 @@ struct ThumbnailView: View {
                     .aspectRatio(contentMode: .fill)
             } else {
                 RoundedRectangle(cornerRadius: 4)
-                    .fill(Color.black.opacity(0.15))
+                    .fill(Color(NSColor.controlBackgroundColor).opacity(0.5))
                     .overlay(
                         Image(systemName: "photo")
                             .font(.system(size: min(width, height) * 0.35))
-                            .foregroundColor(.white.opacity(0.3))
+                            .foregroundColor(.secondary.opacity(0.5))
                     )
             }
         }
@@ -927,10 +908,22 @@ struct ThumbnailView: View {
     }
 
     private func loadThumbnail() {
-        guard let urlString = urlString, let url = URL(string: urlString) else { return }
+        guard let urlString = urlString,
+              let url = URL(string: urlString),
+              let scheme = url.scheme?.lowercased(),
+              scheme == "https" else { return }
+              
         Task.detached {
             do {
-                let (data, _) = try await URLSession.shared.data(from: url)
+                let (data, response) = try await URLSession.shared.data(from: url)
+                guard data.count <= 5 * 1024 * 1024 else { return }
+                
+                if let httpResponse = response as? HTTPURLResponse,
+                   let contentType = httpResponse.value(forHTTPHeaderField: "Content-Type"),
+                   !contentType.hasPrefix("image/") {
+                    return
+                }
+                
                 if let image = NSImage(data: data) {
                     Task { @MainActor in self.loadedImage = image }
                 }
