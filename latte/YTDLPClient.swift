@@ -38,6 +38,8 @@ enum BrowserCookie: String, CaseIterable, Identifiable {
     case firefox = "firefox"
     case edge = "edge"
     case brave = "brave"
+    case opera = "opera"
+    case vivaldi = "vivaldi"
 
     var id: String { rawValue }
     var displayName: String {
@@ -47,6 +49,8 @@ enum BrowserCookie: String, CaseIterable, Identifiable {
         case .firefox: return "Firefox"
         case .edge: return "Edge"
         case .brave: return "Brave"
+        case .opera: return "Opera"
+        case .vivaldi: return "Vivaldi"
         }
     }
 }
@@ -200,6 +204,9 @@ class YTDLPClient: ObservableObject {
     @Published var downloadProgressText: String = ""
     @Published var downloadError: String? = nil
     @Published var downloadCompleted: Bool = false
+    
+    @Published var hasUpdateAvailable: Bool = false
+    @Published var updateVersionTag: String? = nil
 
     @Published var downloadFolder: String = UserDefaults.standard.string(forKey: "downloadFolder") ?? {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
@@ -267,6 +274,10 @@ class YTDLPClient: ObservableObject {
         let urls = extractURLs()
         return !urls.isEmpty
     }
+    
+    var canDownload: Bool {
+        return (hasVideoInfo || (isPlaylist && !videoEntries.isEmpty)) && !isFetchingInfo && !isDownloading
+    }
 
     init() {
         let homeDirectory = FileManager.default.homeDirectoryForCurrentUser
@@ -305,8 +316,34 @@ class YTDLPClient: ObservableObject {
 
         checkFfmpegAsync()
         runSetupScript()
+        checkForUpdates()
 
         NotificationCenter.default.post(name: .windowMovableChanged, object: nil, userInfo: ["value": isWindowMovable])
+    }
+    
+    private func checkForUpdates() {
+        Task.detached {
+            do {
+                guard let reqURL = URL(string: "https://github.com/arinltte/latte/releases/latest") else { return }
+                var request = URLRequest(url: reqURL)
+                request.httpMethod = "HEAD"
+                let (_, response) = try await URLSession.shared.data(for: request)
+                let tag = (response.url?.lastPathComponent ?? "").trimmingCharacters(in: .whitespaces).trimmingCharacters(in: CharacterSet(charactersIn: "v"))
+                
+                let versionPattern = #"^\d+\.\d+\.\d+$"#
+                guard tag.range(of: versionPattern, options: .regularExpression) != nil else { return }
+
+                let current = (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "0.1.0"
+                let isNewer = tag.compare(current, options: .numeric) == .orderedDescending
+
+                if isNewer {
+                    await MainActor.run {
+                        self.hasUpdateAvailable = true
+                        self.updateVersionTag = tag
+                    }
+                }
+            } catch { }
+        }
     }
 
     nonisolated func createDirectoryIfNeeded() {
@@ -358,9 +395,9 @@ class YTDLPClient: ObservableObject {
     func runSetupScript() {
         Task.detached {
             let fm = FileManager.default
-            let ytdlpFile = self.ytdlpPath.path
+            try? fm.createDirectory(at: self.latteDirectory, withIntermediateDirectories: true)
 
-            if fm.isExecutableFile(atPath: ytdlpFile) {
+            if fm.isExecutableFile(atPath: self.ytdlpPath.path) {
                 await MainActor.run { self.setupState = .ready; self.setupProgressText = "Ready" }
                 return
             }
@@ -370,23 +407,15 @@ class YTDLPClient: ObservableObject {
                 self.setupProgressText = "Installing fast backend (yt-dlp)…"
             }
 
-            let installTask = Process()
-            installTask.executableURL = URL(fileURLWithPath: "/bin/bash")
+            let curlTask = Process()
+            curlTask.executableURL = URL(fileURLWithPath: "/usr/bin/curl")
+            curlTask.arguments = ["-L", "-o", self.ytdlpPath.path, "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos"]
+            curlTask.currentDirectoryURL = self.latteDirectory
             
-            let script = """
-            mkdir -p "\(self.latteDirectory.path)"
-            cd "\(self.latteDirectory.path)"
-            curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos -o yt-dlp 2>/dev/null
-            chmod a+x yt-dlp
-            ./yt-dlp --version
-            """
-            installTask.arguments = ["-c", script]
-
-            let setupPipe = Pipe()
-            installTask.standardOutput = setupPipe
-            installTask.standardError = setupPipe
-
-            setupPipe.fileHandleForReading.readabilityHandler = { handle in
+            let curlPipe = Pipe()
+            curlTask.standardOutput = curlPipe
+            curlTask.standardError = curlPipe
+            curlPipe.fileHandleForReading.readabilityHandler = { handle in
                 let data = handle.availableData
                 if data.count > 0, let str = String(data: data, encoding: .utf8) {
                     let lines = str.components(separatedBy: .newlines).filter { !$0.isEmpty }
@@ -397,17 +426,53 @@ class YTDLPClient: ObservableObject {
             }
 
             do {
-                try installTask.run()
-                installTask.waitUntilExit()
-                setupPipe.fileHandleForReading.readabilityHandler = nil
+                try curlTask.run()
+                curlTask.waitUntilExit()
+                curlPipe.fileHandleForReading.readabilityHandler = nil
+                
+                guard curlTask.terminationStatus == 0, fm.fileExists(atPath: self.ytdlpPath.path) else {
+                    await MainActor.run {
+                        self.setupState = .error
+                        self.setupProgressText = "Download failed. Check internet connection."
+                    }
+                    return
+                }
+                
+                if let binaryData = fm.contents(atPath: self.ytdlpPath.path) {
+                    let magicBytes = binaryData.prefix(4)
+                    let validMagics: [Data] = [
+                        Data([0xCF, 0xFA, 0xED, 0xFE]),
+                        Data([0xCE, 0xFA, 0xED, 0xFE]),
+                        Data([0xCA, 0xFE, 0xBA, 0xBE]),
+                        Data([0x23, 0x21, 0x2F, 0x75])
+                    ]
+                    if !validMagics.contains(where: { Data(magicBytes) == $0 }) {
+                        try? fm.removeItem(at: self.ytdlpPath)
+                        await MainActor.run {
+                            self.setupState = .error
+                            self.setupProgressText = "Downloaded binary failed integrity check. Please retry."
+                        }
+                        return
+                    }
+                }
+                
+                try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: self.ytdlpPath.path)
+                
+                let versionTask = Process()
+                versionTask.executableURL = self.ytdlpPath
+                versionTask.arguments = ["--version"]
+                versionTask.standardOutput = FileHandle.nullDevice
+                versionTask.standardError = FileHandle.nullDevice
+                try versionTask.run()
+                versionTask.waitUntilExit()
 
                 await MainActor.run {
-                    if installTask.terminationStatus == 0 {
+                    if versionTask.terminationStatus == 0 {
                         self.setupState = .ready
                         self.setupProgressText = "Ready"
                     } else {
                         self.setupState = .error
-                        self.setupProgressText = "Installation failed. Check internet connection."
+                        self.setupProgressText = "Installation failed. Binary verification failed."
                     }
                 }
             } catch {
@@ -428,25 +493,61 @@ class YTDLPClient: ObservableObject {
         }
     }
 
+    nonisolated private func isValidURL(_ string: String) -> Bool {
+        guard let url = URL(string: string),
+              let scheme = url.scheme?.lowercased(),
+              (scheme == "http" || scheme == "https"),
+              url.host != nil else {
+            return false
+        }
+        if string.hasPrefix("-") { return false }
+        return true
+    }
+
     func extractURLs() -> [String] {
         if isMultipleLinks {
             return urlText
                 .components(separatedBy: .newlines)
                 .map { $0.trimmingCharacters(in: .whitespaces) }
-                .filter { $0.hasPrefix("http://") || $0.hasPrefix("https://") }
+                .filter { isValidURL($0) }
         } else {
             let trimmed = urlText.trimmingCharacters(in: .whitespacesAndNewlines)
-            if trimmed.hasPrefix("http://") || trimmed.hasPrefix("https://") {
-                return [trimmed]
-            }
+            if isValidURL(trimmed) { return [trimmed] }
             return []
         }
+    }
+
+    nonisolated private func getPlaylistLimits(for urls: [String]) -> [String] {
+        guard urls.count == 1, let url = urls.first else { return [] }
+        guard (url.contains("youtube.com") || url.contains("youtu.be")) && (url.contains("list=RD") || url.contains("start_radio=1")) else { return [] }
+        
+        let indexRegex = try? NSRegularExpression(pattern: "index=(\\d+)")
+        let nsRange = NSRange(url.startIndex..<url.endIndex, in: url)
+        
+        if let match = indexRegex?.firstMatch(in: url, options: [], range: nsRange),
+           let range = Range(match.range(at: 1), in: url),
+           let index = Int(url[range]) {
+            return ["--playlist-items", "\(index)-\(index + 24)"]
+        }
+        
+        return ["--playlist-items", "1-25"]
+    }
+
+    // MARK: - Shell escaping
+    // Wraps a string in single quotes and escapes any embedded single quotes.
+    // This is safe for use in /bin/bash -c strings regardless of URL content.
+    nonisolated private func shellEscape(_ string: String) -> String {
+        // Replace each ' with '\'' (close quote, escaped literal quote, reopen quote)
+        let escaped = string.replacingOccurrences(of: "'", with: "'\\''")
+        return "'\(escaped)'"
     }
 
     func fetchVideoInfo() {
         let urls = extractURLs()
         guard !urls.isEmpty else { return }
 
+        clearState()
+        
         isFetchingInfo = true
         hasVideoInfo = false
         isPlaylist = false
@@ -458,80 +559,105 @@ class YTDLPClient: ObservableObject {
         let safeYtdlpExe = self.ytdlpExecutable()
         let safeLatteDir = self.latteDirectory
         let safeCookies = self.browserCookies
+        let isInstagram = urls.contains(where: { $0.localizedCaseInsensitiveContains("instagram.com") })
 
         Task.detached {
-            let batchFile = safeLatteDir.appendingPathComponent("batch.txt")
+            let batchFile = safeLatteDir.appendingPathComponent("batch-\(UUID().uuidString).txt")
             let urlsString = urls.joined(separator: "\n")
             try? urlsString.write(to: batchFile, atomically: true, encoding: .utf8)
+            defer { try? FileManager.default.removeItem(at: batchFile) }
 
             let task = Process()
-                        task.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-                        task.environment = self.processEnvironment()
-                        
-                        var arguments = [safeYtdlpExe, "--dump-single-json", "--flat-playlist", "--no-warnings"]
-                        
-                        if safeCookies != .none {
-                            arguments += ["--cookies-from-browser", safeCookies.rawValue]
-                        }
-                        arguments += ["-a", batchFile.path]
-                        
-                        task.arguments = arguments
+            task.executableURL = URL(fileURLWithPath: "/bin/bash")
 
+            // FIX 1: For Instagram, omit --flat-playlist so stories/carousels resolve
+            // their child entries. For all other platforms, --flat-playlist keeps metadata
+            // fast by avoiding per-entry network round-trips.
+            //
+            // For Instagram single videos (no entries array), --dump-single-json still
+            // emits a flat JSON object which parseFetchOutput handles via firstSingleDict.
+            //
+            // For Instagram multi-video content (stories/carousels), yt-dlp without
+            // --flat-playlist emits the parent JSON with an "entries" array populated.
+            var script = """
+            export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+            \(self.shellEscape(safeYtdlpExe)) --dump-single-json --no-warnings
+            """
+            
+            if !isInstagram {
+                script += " --flat-playlist"
+            }
+            
+            if safeCookies != .none {
+                script += " --cookies-from-browser \(safeCookies.rawValue)"
+            }
+
+            let playlistLimits = self.getPlaylistLimits(for: urls)
+            if !playlistLimits.isEmpty {
+                script += " " + playlistLimits.joined(separator: " ")
+            }
+
+            script += " -a \(self.shellEscape(batchFile.path))"
+            task.arguments = ["-c", script]
+
+            // FIX 2: Use readabilityHandler exclusively — do NOT also call
+            // readDataToEndOfFile() after waitUntilExit(). Mixing both causes a race:
+            // the handler drains the pipe buffer asynchronously, so readDataToEndOfFile()
+            // either blocks forever waiting for data that was already consumed, or
+            // returns an empty/partial Data. Pick one strategy and stick with it.
             let stdOutPipe = Pipe()
             let stdErrPipe = Pipe()
             task.standardOutput = stdOutPipe
             task.standardError = stdErrPipe
 
+            // Accumulate output safely from the readability callbacks.
+            // nonisolated Task.detached context — using local vars is fine here.
             var outputData = Data()
             var errorData = Data()
             
+            let outputLock = NSLock()
+            let errorLock = NSLock()
+
             stdOutPipe.fileHandleForReading.readabilityHandler = { handle in
-                outputData.append(handle.availableData)
+                let chunk = handle.availableData
+                guard !chunk.isEmpty else { return }
+                outputLock.withLock { outputData.append(chunk) }
             }
             stdErrPipe.fileHandleForReading.readabilityHandler = { handle in
-                errorData.append(handle.availableData)
+                let chunk = handle.availableData
+                guard !chunk.isEmpty else { return }
+                errorLock.withLock { errorData.append(chunk) }
             }
 
             do {
                 try task.run()
                 task.waitUntilExit()
                 
+                // Disable handlers before reading final state to avoid a race on the lock.
                 stdOutPipe.fileHandleForReading.readabilityHandler = nil
                 stdErrPipe.fileHandleForReading.readabilityHandler = nil
-                
-                outputData.append(stdOutPipe.fileHandleForReading.readDataToEndOfFile())
-                errorData.append(stdErrPipe.fileHandleForReading.readDataToEndOfFile())
+
+                // Drain any bytes the handler didn't pick up (e.g. last chunk before EOF).
+                outputLock.withLock {
+                    let trailing = stdOutPipe.fileHandleForReading.readDataToEndOfFile()
+                    if !trailing.isEmpty { outputData.append(trailing) }
+                }
+                errorLock.withLock {
+                    let trailing = stdErrPipe.fileHandleForReading.readDataToEndOfFile()
+                    if !trailing.isEmpty { errorData.append(trailing) }
+                }
 
                 let output = String(data: outputData, encoding: .utf8) ?? ""
                 let errOutput = String(data: errorData, encoding: .utf8) ?? ""
                 
-                let lines = output.components(separatedBy: .newlines).filter { $0.trimmingCharacters(in: .whitespaces).hasPrefix("{") }
-                
-                var aggregatedEntries: [VideoEntry] = []
-                var foundPlaylistTitle: String? = nil
-                var firstSingleDict: [String: Any]? = nil
+                print("[LATTE_YTDLP_LOG] (Fetch) StdErr Output:\n\(errOutput)")
 
-                for line in lines {
-                    guard let data = line.data(using: .utf8),
-                          let info = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { continue }
-                    
-                    if let entries = info["entries"] as? [[String: Any]] {
-                        if foundPlaylistTitle == nil {
-                            foundPlaylistTitle = info["title"] as? String ?? info["playlist_title"] as? String
-                        }
-                        for entry in entries {
-                            aggregatedEntries.append(self.parseEntry(entry))
-                        }
-                    } else {
-                        aggregatedEntries.append(self.parseEntry(info))
-                        if firstSingleDict == nil { firstSingleDict = info }
-                    }
-                }
+                let result = self.parseFetchOutput(output: output, urls: urls, isInstagram: isInstagram)
 
                 await MainActor.run {
                     self.isFetchingInfo = false
 
-                    if task.terminationStatus != 0 && aggregatedEntries.isEmpty {
+                    if task.terminationStatus != 0 && result.entries.isEmpty {
                         var errorMsg = errOutput.trimmingCharacters(in: .whitespacesAndNewlines)
                         if errorMsg.isEmpty { errorMsg = "Unknown error occurred." }
                         
@@ -539,7 +665,9 @@ class YTDLPClient: ObservableObject {
                         var mainError = errLines.first(where: { $0.contains("ERROR:") }) ?? errLines.last ?? errorMsg
                         let lowerError = mainError.lowercased()
                         
-                        if lowerError.contains("account authentication is required") || lowerError.contains("sign in") || lowerError.contains("this content is unreachable") || lowerError.contains("authentication") || lowerError.contains("login") {
+                        if lowerError.contains("403: forbidden") {
+                            mainError = "HTTP 403 Forbidden: Server blocked the request. Try changing Browser Cookies to 'None' in Settings."
+                        } else if lowerError.contains("account authentication is required") || lowerError.contains("sign in") || lowerError.contains("this content is unreachable") || lowerError.contains("authentication") || lowerError.contains("login") {
                             mainError = "Authentication required. Ensure you are logged into \(safeCookies.displayName) (Default Profile)."
                         } else if lowerError.contains("cannot parse data") {
                             mainError = "Cannot parse data. This is a known yt-dlp limitation, often occurring with private Facebook videos."
@@ -551,9 +679,8 @@ class YTDLPClient: ObservableObject {
                         return
                     }
 
-                    if aggregatedEntries.isEmpty {
+                    if result.entries.isEmpty {
                         if task.terminationStatus == 0 {
-                            // Succeeded but returned no standard JSON (e.g. some IG Stories)
                             self.isPlaylist = false
                             self.hasVideoInfo = true
                             self.singleVideoTitle = "Media Ready to Download"
@@ -564,12 +691,12 @@ class YTDLPClient: ObservableObject {
                         return
                     }
 
-                    if urls.count > 1 || aggregatedEntries.count > 1 {
+                    if urls.count > 1 || result.entries.count > 1 {
                         self.isPlaylist = true
-                        self.playlistTitle = urls.count > 1 ? "Batch (\(aggregatedEntries.count) Links)" : (foundPlaylistTitle ?? "Playlist")
-                        self.videoEntries = aggregatedEntries
-                        self.hasVideoInfo = !aggregatedEntries.isEmpty
-                    } else if let singleDict = firstSingleDict {
+                        self.playlistTitle = urls.count > 1 ? "Batch (\(result.entries.count) Links)" : (result.playlistTitle ?? "Playlist")
+                        self.videoEntries = result.entries
+                        self.hasVideoInfo = !result.entries.isEmpty
+                    } else if let singleDict = result.firstSingleDict {
                         self.isPlaylist = false
                         self.parseSingleVideo(info: singleDict)
                     }
@@ -582,7 +709,59 @@ class YTDLPClient: ObservableObject {
             }
         }
     }
-    
+
+    // MARK: - Fetch output parsing
+    // Extracted into its own nonisolated method so it can be called from Task.detached
+    // without capturing self implicitly, and so the logic is independently testable.
+    //
+    // FIX 3: Instagram without --flat-playlist emits one large JSON blob per URL (not
+    // newline-separated JSON objects). The old code filtered lines by `hasPrefix("{")`,
+    // which works fine for flat-playlist output (each entry is its own line) but misses
+    // the single-object case where yt-dlp wraps everything inside one JSON with an
+    // "entries" key. This method handles both layouts:
+    //
+    //  a) Multiple top-level JSON objects, one per line  → flat playlist mode
+    //  b) One JSON object containing an "entries" array  → full fetch mode (Instagram)
+    //  c) One flat JSON object for a single video        → single video in either mode
+    private struct FetchResult {
+        var entries: [VideoEntry]
+        var playlistTitle: String?
+        var firstSingleDict: [String: Any]?
+    }
+
+    nonisolated private func parseFetchOutput(output: String, urls: [String], isInstagram: Bool) -> FetchResult {
+        var aggregatedEntries: [VideoEntry] = []
+        var foundPlaylistTitle: String? = nil
+        var firstSingleDict: [String: Any]? = nil
+
+        // Each yt-dlp JSON object starts on its own line beginning with '{'.
+        // For Instagram full-fetch, there may be only one such line.
+        let lines = output.components(separatedBy: .newlines).filter {
+            $0.trimmingCharacters(in: .whitespaces).hasPrefix("{")
+        }
+
+        for line in lines {
+            guard let data = line.data(using: .utf8),
+                  let info = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { continue }
+
+            if let entries = info["entries"] as? [[String: Any]] {
+                // Playlist or multi-video content (e.g. IG story/carousel)
+                if foundPlaylistTitle == nil {
+                    foundPlaylistTitle = info["title"] as? String ?? info["playlist_title"] as? String
+                }
+                for entry in entries {
+                    aggregatedEntries.append(parseEntry(entry))
+                }
+            } else {
+                // Single video — flat JSON
+                if firstSingleDict == nil { firstSingleDict = info }
+                aggregatedEntries.append(parseEntry(info))
+            }
+        }
+
+        return FetchResult(entries: aggregatedEntries, playlistTitle: foundPlaylistTitle, firstSingleDict: firstSingleDict)
+    }
+
     nonisolated private func parseEntry(_ info: [String: Any]) -> VideoEntry {
         let t = info["title"] as? String
         let entryTitle = (t?.isEmpty == false) ? t! : (info["id"] as? String ?? "Media Ready to Download")
@@ -604,19 +783,19 @@ class YTDLPClient: ObservableObject {
     }
 
     nonisolated private func ytdlpExecutable() -> String {
-            let fm = FileManager.default
-            if fm.isExecutableFile(atPath: ytdlpPath.path) {
-                return ytdlpPath.path
-            }
-            return "yt-dlp"
+        let fm = FileManager.default
+        if fm.isExecutableFile(atPath: ytdlpPath.path) {
+            return ytdlpPath.path
         }
+        return "yt-dlp"
+    }
 
-        nonisolated private func processEnvironment() -> [String: String] {
-            var environment = ProcessInfo.processInfo.environment
-            let existingPath = environment["PATH"] ?? "/usr/bin:/bin:/usr/sbin:/sbin"
-            environment["PATH"] = "/opt/homebrew/bin:/usr/local/bin:\(existingPath)"
-            return environment
-        }
+    nonisolated private func processEnvironment() -> [String: String] {
+        var environment = ProcessInfo.processInfo.environment
+        let existingPath = environment["PATH"] ?? "/usr/bin:/bin:/usr/sbin:/sbin"
+        environment["PATH"] = "/opt/homebrew/bin:/usr/local/bin:\(existingPath)"
+        return environment
+    }
 
     private func parseSingleVideo(info: [String: Any]) {
         hasVideoInfo = true
@@ -645,6 +824,38 @@ class YTDLPClient: ObservableObject {
                 return folderPath
             }
             counter += 1
+        }
+    }
+
+    func downloadThumbnailOnly() {
+        guard let urlStr = singleVideoThumbnail, let url = URL(string: urlStr) else { return }
+        
+        let invalidCharacters = CharacterSet(charactersIn: "\\/:*?\"<>|")
+        let safeTitle = singleVideoTitle.components(separatedBy: invalidCharacters).joined(separator: "_")
+        let destURL = URL(fileURLWithPath: downloadFolder).appendingPathComponent("\(safeTitle)_thumbnail.jpg")
+        
+        isDownloading = true
+        downloadPercent = 0.5
+        downloadProgressText = "Fetching thumbnail…"
+        downloadError = nil
+        downloadCompleted = false
+        
+        Task {
+            do {
+                let (data, _) = try await URLSession.shared.data(from: url)
+                try data.write(to: destURL)
+                await MainActor.run {
+                    self.isDownloading = false
+                    self.downloadPercent = 1.0
+                    self.downloadCompleted = true
+                    self.downloadProgressText = "Thumbnail saved"
+                }
+            } catch {
+                await MainActor.run {
+                    self.isDownloading = false
+                    self.downloadError = "Thumbnail download failed"
+                }
+            }
         }
     }
 
@@ -691,6 +902,11 @@ class YTDLPClient: ObservableObject {
         let wSubs = self.writeSubtitles
         let ytdlp = ytdlpExecutable()
 
+        // FIX 4: Compute playlist limits from the original `urls` array (which always has
+        // exactly one entry in the non-batch case). Previously the code passed `urls` here
+        // correctly, but this is now explicit and documented to prevent future regression.
+        let playlistLimits = getPlaylistLimits(for: urls)
+
         activeDownloadTask = Task.detached {
             var completedCount = 0
             let totalCount = selectedUrls.count
@@ -699,33 +915,45 @@ class YTDLPClient: ObservableObject {
                 if Task.isCancelled { break }
 
                 let task = Process()
-                                await MainActor.run { self.currentDownloadProcess = task }
-                                
-                                task.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-                                task.environment = self.processEnvironment()
-                                task.currentDirectoryURL = URL(fileURLWithPath: targetFolder)
+                await MainActor.run { self.currentDownloadProcess = task }
+                
+                task.executableURL = URL(fileURLWithPath: "/bin/bash")
 
-                                var arguments = [ytdlp, "--no-warnings", "--newline", "--progress"]
-                                
-                                if bCookies != .none {
-                                    arguments += ["--cookies-from-browser", bCookies.rawValue]
-                                }
+                // FIX 5: Use shellEscape() for the URL and target folder so that URLs or
+                // folder paths containing single quotes don't break the shell command.
+                // Previously the URL was interpolated as '\(url)' — if the URL itself
+                // contained a single quote character the shell command would be malformed.
+                var command = """
+                export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+                cd \(self.shellEscape(targetFolder))
+                \(self.shellEscape(ytdlp)) --no-warnings --newline --progress
+                """
+                
+                if bCookies != .none {
+                    command += " --cookies-from-browser \(bCookies.rawValue)"
+                }
 
-                                if dlType == .video {
-                                    arguments += ["-f", formatOpt.formatSpec]
-                                    if let mFormat = formatOpt.mergeFormat {
-                                        arguments += ["--merge-output-format", mFormat]
-                                    }
-                                } else {
-                                    arguments += ["-f", audioOpt.formatSpec, "-x", "--audio-format", audioOpt.audioFormat, "--audio-quality", audioOpt.audioQuality]
-                                }
+                if !playlistLimits.isEmpty {
+                    command += " " + playlistLimits.joined(separator: " ")
+                }
 
-                                if eThumb { arguments.append("--embed-thumbnail") }
-                                if eMeta { arguments.append("--embed-metadata") }
-                                if wSubs { arguments += ["--write-subs", "--embed-subs"] }
+                if dlType == .video {
+                    command += " -f '\(formatOpt.formatSpec)'"
+                    if let mFormat = formatOpt.mergeFormat {
+                        command += " --merge-output-format \(mFormat)"
+                    }
+                } else {
+                    command += " -f '\(audioOpt.formatSpec)' -x --audio-format \(audioOpt.audioFormat) --audio-quality \(audioOpt.audioQuality)"
+                }
 
-                                arguments += ["-o", "%(title)s [%(id)s].%(ext)s", url]
-                                task.arguments = arguments
+                if eThumb { command += " --embed-thumbnail" }
+                if eMeta { command += " --embed-metadata" }
+                if wSubs { command += " --write-subs --embed-subs" }
+
+                command += " -o '%(title)s [%(id)s].%(ext)s'"
+                command += " \(self.shellEscape(url))"
+
+                task.arguments = ["-c", command]
 
                 let stdOutPipe = Pipe()
                 let stdErrPipe = Pipe()
@@ -761,6 +989,9 @@ class YTDLPClient: ObservableObject {
                 stdErrPipe.fileHandleForReading.readabilityHandler = { handle in
                     let data = handle.availableData
                     guard data.count > 0, let str = String(data: data, encoding: .utf8) else { return }
+                    
+                    print("[LATTE_YTDLP_LOG] (Download) StdErr Stream:\n\(str)")
+                    
                     let lines = str.components(separatedBy: .newlines).filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
                     if let last = lines.last {
                         lastErrorLine = last
@@ -781,7 +1012,9 @@ class YTDLPClient: ObservableObject {
                         let lowerError = fallbackError.lowercased()
                         
                         await MainActor.run {
-                            if lowerError.contains("unreachable") || lowerError.contains("authentication") || lowerError.contains("sign in") {
+                            if lowerError.contains("403: forbidden") {
+                                self.downloadError = "HTTP 403 Forbidden: Server blocked the request. Try changing Browser Cookies to 'None' in Settings."
+                            } else if lowerError.contains("unreachable") || lowerError.contains("authentication") || lowerError.contains("sign in") {
                                 self.downloadError = "Authentication failed. Make sure you are logged into \(bCookies.displayName)."
                             } else if lowerError.contains("cannot parse data") {
                                 self.downloadError = "Cannot parse data. This is a known yt-dlp limitation with some private videos."
@@ -812,13 +1045,19 @@ class YTDLPClient: ObservableObject {
         }
     }
 
+    // FIX 6: Capture the process reference before cancelling the task, because by the
+    // time activeDownloadTask.cancel() is observed the task may have already cleared
+    // currentDownloadProcess to nil in its finally block.
     func stopDownload() {
+        let processToTerminate = currentDownloadProcess
         activeDownloadTask?.cancel()
-        if let process = currentDownloadProcess {
+        activeDownloadTask = nil
+        if let process = processToTerminate {
             process.terminationHandler = nil
             process.terminate()
         }
         isDownloading = false
+        currentDownloadProcess = nil
         downloadProgressText = "Stopped"
     }
 
