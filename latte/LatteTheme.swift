@@ -9,7 +9,6 @@ import SwiftUI
 
 // MARK: - App Theme Configuration
 
-/// Centralized configuration for all ambient window themes.
 enum AppTheme: String, CaseIterable, Identifiable {
     case `default` = "Default"
     case rareJade = "Rare Jade"
@@ -19,56 +18,38 @@ enum AppTheme: String, CaseIterable, Identifiable {
     var id: String { rawValue }
     var displayName: String { rawValue }
     
-    /// Global Accent Color for UI controls (Buttons, Toggles, etc.)
     var accentColor: Color {
         switch self {
-        case .default: return .blue
+        case .default: return Color.accentColor
         case .rareJade: return Color(red: 0.25, green: 0.65, blue: 0.55)
         case .deepOcean: return Color(red: 0.2, green: 0.5, blue: 0.95)
         case .floral: return Color(hex: "#DC308F")
         }
     }
 
-    /// Background Palette configurations & Animation settings
     var palette: ThemePalette? {
         switch self {
-        case .default:
-            return nil // Fallback to standard macOS ultraThinMaterial without animation
-            
+        case .default: return nil
         case .rareJade:
             return ThemePalette(
-                centerDark: [Color.black.opacity(0.2), Color.black.opacity(0.65)],
-                primaryGlow: [
-                    Color(red: 0.35, green: 0.85, blue: 0.65).opacity(0.25),
-                    Color(red: 0.15, green: 0.55, blue: 0.45).opacity(0.08),
-                    .clear
-                ],
-                diffuseWash: [.clear, Color(red: 0.2, green: 0.6, blue: 0.5).opacity(0.1)],
-                animationSpeed: 175.0
+                centerDark: [Color.black.opacity(0.05), Color.black.opacity(0.3)],
+                primaryGlow: [Color(red: 0.35, green: 0.85, blue: 0.65).opacity(0.15), .clear],
+                diffuseWash: [.clear, Color(red: 0.2, green: 0.6, blue: 0.5).opacity(0.05)],
+                animationSpeed: 180.0
             )
-            
         case .deepOcean:
             return ThemePalette(
-                centerDark: [Color.black.opacity(0.2), Color.black.opacity(0.7)],
-                primaryGlow: [
-                    Color(red: 0.2, green: 0.5, blue: 0.95).opacity(0.25),
-                    Color(red: 0.1, green: 0.3, blue: 0.7).opacity(0.08),
-                    .clear
-                ],
-                diffuseWash: [.clear, Color(red: 0.1, green: 0.25, blue: 0.6).opacity(0.12)],
-                animationSpeed: 175.0
+                centerDark: [Color.black.opacity(0.05), Color.black.opacity(0.35)],
+                primaryGlow: [Color(red: 0.2, green: 0.5, blue: 0.95).opacity(0.15), .clear],
+                diffuseWash: [.clear, Color(red: 0.1, green: 0.25, blue: 0.6).opacity(0.06)],
+                animationSpeed: 180.0
             )
-            
         case .floral:
             return ThemePalette(
-                centerDark: [Color.black.opacity(0.15), Color.black.opacity(0.6)],
-                primaryGlow: [
-                    Color(hex: "#DC308F").opacity(0.20),
-                    Color(hex: "#D0A8C9").opacity(0.10),
-                    .clear
-                ],
-                diffuseWash: [.clear, Color(hex: "#DC308F").opacity(0.08)],
-                animationSpeed: 175.0
+                centerDark: [Color.black.opacity(0.05), Color.black.opacity(0.3)],
+                primaryGlow: [Color(hex: "#DC308F").opacity(0.12), .clear],
+                diffuseWash: [.clear, Color(hex: "#DC308F").opacity(0.05)],
+                animationSpeed: 180.0
             )
         }
     }
@@ -86,90 +67,44 @@ struct ThemePalette {
 struct AmbientThemeBackground: View {
     let theme: AppTheme
     let isActive: Bool
+    
     @State private var p1 = false
     @State private var p2 = false
     @State private var running = false
 
     var body: some View {
         ZStack {
-            // ALWAYS render the base frosted glass layer to prevent 0x0 collapse
-            Rectangle()
-                .fill(.ultraThinMaterial)
+            // First-party Apple aesthetic relies on standard material blurring
+            Rectangle().fill(.regularMaterial)
 
             if let palette = theme.palette, isActive {
-                RadialGradient(
-                    gradient: Gradient(colors: palette.centerDark),
-                    center: .center, startRadius: 0, endRadius: 260
-                )
-
-                RadialGradient(
-                    gradient: Gradient(colors: palette.primaryGlow),
-                    center: p1 ? UnitPoint(x: 0.18, y: 0.22) : UnitPoint(x: 0.82, y: 0.78),
-                    startRadius: 0, endRadius: 310
-                )
-                .blendMode(.screen)
-
-                RadialGradient(
-                    gradient: Gradient(colors: palette.primaryGlow.reversed()),
-                    center: p2 ? UnitPoint(x: 0.78, y: 0.20) : UnitPoint(x: 0.22, y: 0.80),
-                    startRadius: 0, endRadius: 280
-                )
-                .opacity(0.55)
-                .blendMode(.screen)
-
-                LinearGradient(
-                    gradient: Gradient(colors: palette.diffuseWash),
-                    startPoint: p1 ? .topTrailing : .bottomLeading,
-                    endPoint: .center
-                )
-                .blendMode(.softLight)
+                RadialGradient(gradient: Gradient(colors: palette.centerDark), center: .center, startRadius: 0, endRadius: 300)
+                RadialGradient(gradient: Gradient(colors: palette.primaryGlow), center: p1 ? UnitPoint(x: 0.2, y: 0.2) : UnitPoint(x: 0.8, y: 0.8), startRadius: 0, endRadius: 350).blendMode(.screen)
+                RadialGradient(gradient: Gradient(colors: palette.primaryGlow.reversed()), center: p2 ? UnitPoint(x: 0.8, y: 0.2) : UnitPoint(x: 0.2, y: 0.8), startRadius: 0, endRadius: 300).opacity(0.4).blendMode(.screen)
+                LinearGradient(gradient: Gradient(colors: palette.diffuseWash), startPoint: p1 ? .topTrailing : .bottomLeading, endPoint: .center).blendMode(.softLight)
             }
         }
-        .onAppear {
-            setAnimationActive(isActive)
-        }
-        .onChange(of: isActive) { _, active in
-            setAnimationActive(active)
-        }
-        .onChange(of: theme) { _, _ in
-            stopAnimation()
-            setAnimationActive(isActive)
-        }
-        .onDisappear {
-            setAnimationActive(false)
-        }
+        .onAppear { setAnimationActive(isActive) }
+        .onChange(of: isActive) { _, active in setAnimationActive(active) }
+        .onChange(of: theme) { _, _ in stopAnimation(); setAnimationActive(isActive) }
+        .onDisappear { setAnimationActive(false) }
     }
-
+    
     private func setAnimationActive(_ active: Bool) {
-        if active {
-            startAnimationIfNeeded()
-        } else {
-            stopAnimation()
-        }
+        if active { startAnimationIfNeeded() } else { stopAnimation() }
     }
-
+    
     private func startAnimationIfNeeded() {
-        guard let speed = theme.palette?.animationSpeed else {
-            stopAnimation()
-            return
-        }
+        guard let speed = theme.palette?.animationSpeed else { stopAnimation(); return }
         guard !running else { return }
         running = true
-
-        withAnimation(
-            .easeInOut(duration: speed)
-            .repeatForever(autoreverses: true)
-        ) { p1 = true }
-
+        withAnimation(.easeInOut(duration: speed).repeatForever(autoreverses: true)) { p1 = true }
         DispatchQueue.main.asyncAfter(deadline: .now() + speed * 0.5) {
             guard running else { return }
-            withAnimation(
-                .easeInOut(duration: speed * 1.3)
-                .repeatForever(autoreverses: true)
-            ) { p2 = true }
+            withAnimation(.easeInOut(duration: speed * 1.3).repeatForever(autoreverses: true)) { p2 = true }
         }
     }
-
+    
     private func stopAnimation() {
         running = false
         var transaction = Transaction()
