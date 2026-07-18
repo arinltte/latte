@@ -877,6 +877,31 @@ struct LatteView: View {
     }
 }
 
+// MARK: - Thumbnail Cache
+
+/// Shared in-memory cache for downloaded thumbnail images.
+/// Using NSCache so entries are automatically evicted under memory pressure.
+/// This prevents re-downloading thumbnails every time the panel is shown
+/// (since `hidePanel()` sets `contentView = nil`, destroying the SwiftUI view tree).
+private final class ThumbnailCache {
+    static let shared = ThumbnailCache()
+
+    private let cache = NSCache<NSString, NSImage>()
+
+    private init() {
+        cache.countLimit = 50
+        cache.totalCostLimit = 25 * 1024 * 1024 // ~25 MB
+    }
+
+    func image(for key: String) -> NSImage? {
+        cache.object(forKey: key as NSString)
+    }
+
+    func store(_ image: NSImage, for key: String, cost: Int = 0) {
+        cache.setObject(image, forKey: key as NSString, cost: cost)
+    }
+}
+
 // MARK: - Thumbnail View
 struct ThumbnailView: View {
     let urlString: String?
@@ -912,7 +937,13 @@ struct ThumbnailView: View {
               let url = URL(string: urlString),
               let scheme = url.scheme?.lowercased(),
               scheme == "https" else { return }
-              
+
+        // Return cached image immediately if available
+        if let cached = ThumbnailCache.shared.image(for: urlString) {
+            self.loadedImage = cached
+            return
+        }
+
         Task.detached {
             do {
                 let (data, response) = try await URLSession.shared.data(from: url)
@@ -925,6 +956,7 @@ struct ThumbnailView: View {
                 }
                 
                 if let image = NSImage(data: data) {
+                    ThumbnailCache.shared.store(image, for: urlString, cost: data.count)
                     Task { @MainActor in self.loadedImage = image }
                 }
             } catch { }
