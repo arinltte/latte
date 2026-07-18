@@ -29,7 +29,11 @@ class FloatingPanel: NSPanel {
     override var canBecomeMain: Bool { return true }
 
     override func cancelOperation(_ sender: Any?) {
-        self.orderOut(nil)
+        // Post a notification so AppDelegate.hidePanel() runs its full teardown
+        // (setting contentView = nil to drop CPU, posting panelVisibilityChanged
+        // to stop the ambient animation). Calling orderOut directly here would
+        // bypass both of those.
+        NotificationCenter.default.post(name: .panelDismissRequested, object: nil)
     }
 
     override func setFrame(_ frameRect: NSRect, display flag: Bool) {
