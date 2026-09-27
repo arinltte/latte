@@ -19,11 +19,13 @@ struct latte: App {
 extension Notification.Name {
     static let windowMovableChanged = Notification.Name("windowMovableChanged")
     static let menuBarIconChanged = Notification.Name("menuBarIconChanged")
+    static let panelVisibilityChanged = Notification.Name("panelVisibilityChanged")
 }
 
 class AppDelegate: NSObject, NSApplicationDelegate {
     var statusItem: NSStatusItem?
     var floatingPanel: FloatingPanel!
+    var hostingView: NSHostingView<LatteView>?
     var globalEventMonitor: Any?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -61,11 +63,19 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             defer: false
         )
 
-        let contentView = LatteView(onClose: { [weak self] in
-            self?.hidePanel()
-        })
-
-        floatingPanel.contentView = NSHostingView(rootView: contentView)
+        floatingPanel.contentView = nil
+    }
+    
+    func ensurePanelContent() {
+        if hostingView == nil {
+            let contentView = LatteView(onClose: { [weak self] in
+                self?.hidePanel()
+            })
+            hostingView = NSHostingView(rootView: contentView)
+        }
+        if floatingPanel.contentView == nil {
+            floatingPanel.contentView = hostingView
+        }
     }
 
     func setupNotifications() {
@@ -96,12 +106,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             let keepOpen = UserDefaults.standard.bool(forKey: "keepPanelOpen")
             if keepOpen { return }
             
-            // Do not force-close if standard dialog boxes (like OpenPanel/SavePanel) are currently running
             if NSApp.modalWindow != nil { return }
             
             let mouseLocation = NSEvent.mouseLocation
             if !panel.frame.contains(mouseLocation) {
-                // Also prevent hiding if they literally clicked the status bar icon (handled by statusBarClicked toggle)
                 if let button = self.statusItem?.button, let window = button.window {
                     if window.frame.contains(mouseLocation) { return }
                 }
@@ -119,8 +127,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func showPanel() {
+        ensurePanelContent()
+        
         if !floatingPanel.isMovableByWindowBackground {
-            let screenRect = NSScreen.main?.visibleFrame ?? .zero
+            let targetScreen = screenForStatusItem()
+            let screenRect = targetScreen.visibleFrame
             var frame = floatingPanel.frame
 
             if let button = statusItem?.button, let buttonWindow = button.window {
@@ -130,17 +141,36 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 frame.origin.x = screenRect.maxX - frame.width - 10
             }
 
-            frame.origin.x = max(10, frame.origin.x)
+            let minX = screenRect.minX + 10
+            let maxX = screenRect.maxX - frame.width - 10
+            frame.origin.x = min(max(minX, frame.origin.x), maxX)
             frame.origin.y = screenRect.maxY - frame.height
 
             floatingPanel.setFrame(frame, display: true)
         }
 
         floatingPanel.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
+        
+        if #available(macOS 14.0, *) {
+            NSApp.activate()
+        } else {
+            NSApp.activate(ignoringOtherApps: true)
+        }
+        
+        NotificationCenter.default.post(name: .panelVisibilityChanged, object: nil, userInfo: ["value": true])
+    }
+
+    private func screenForStatusItem() -> NSScreen {
+        let mouse = NSEvent.mouseLocation
+        if let screen = NSScreen.screens.first(where: { $0.frame.contains(mouse) }) { return screen }
+        if let window = statusItem?.button?.window,
+           let screen = NSScreen.screens.first(where: { $0.frame.intersects(window.frame) }) { return screen }
+        return NSScreen.main ?? NSScreen.screens.first ?? NSScreen()
     }
 
     func hidePanel() {
         floatingPanel.orderOut(nil)
+        NotificationCenter.default.post(name: .panelVisibilityChanged, object: nil, userInfo: ["value": false])
+        floatingPanel.contentView = nil // Disconnects SwiftUI to drop CPU usage to 0%
     }
 }

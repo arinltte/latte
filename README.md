@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="public/lattelogo.jpg" alt="latte Logo" width="64" />
+  <img src="public/lattelogo.png" alt="latte Logo" width="64" />
   <br />
   <h1 align="center">latte</h1>
   <p align="center">Just Download Anything.</p>
@@ -9,6 +9,10 @@
     <img src="https://img.shields.io/badge/macOS-14.0%2B-blue?style=flat-square" alt="macOS" />
     <img src="https://img.shields.io/badge/app%20memory-%3C50MB-brightgreen?style=flat-square" alt="Memory" />
   </p>
+</p>
+
+<p align="center">
+  <a href="./README.md">English</a> | <a href="./README-ZH.md">中文文档</a>
 </p>
 
 ---
@@ -23,15 +27,9 @@
 
 - **Menu bar native** — Lives quietly in your menu bar. No Dock icon, no persistent window, no interruption to your workflow.
 - **Universal support** — Supports downloading from over 1,000+ popular platforms including YouTube, Twitch, TikTok, Vimeo, Facebook, Instagram, Twitter, and major news/sports outlets.
-<<<<<<< HEAD
-- **Browser Authentication** — Securely inject cookies from Safari, Chrome, Firefox, Brave, and more to download age-restricted, private, or login-required content (like Reddit videos). 
-- **Batch downloading** — Paste multiple links at once. The UI automatically collapses to save space while fetching massive playlists or batches in the background.
-- **Advanced format management** — Reorder your preferred video and audio formats (supports modern codecs like AV1, WebM, MKV, FLAC, ALAC). Hide formats you don't use to keep your interface perfectly clean.
-=======
 - **Browser Authentication** — Securely inject cookies from Chrome, Firefox, Brave, or Edge to download age-restricted, private, or login-required content. 
 - **Batch downloading** — Paste multiple links at once. The UI automatically collapses to save space while fetching massive playlists or batches in the background.
 - **Advanced format management** — Reorder your preferred video and audio formats (supports modern codecs like AV1, WebM, MKV, FLAC, ALAC). **Show/hide formats** you don't use to keep your interface perfectly clean.
->>>>>>> 2e86d3a (Update app and repository configuration)
 - **Smart Auto-Dismiss & Pinning** — Click anywhere outside the app to hide it instantly, or use the "Keep Window Open" toggle to pin it to your screen.
 - **Post-processing made easy** — Automatically embed thumbnails, inject metadata, and burn subtitles directly into your downloaded files.
 - **Zero-dependency setup** — Automatically configures its own fast backend engine (`yt-dlp`) locally. No manual Python or terminal setup required.
@@ -44,13 +42,6 @@
 - macOS 14 (Sonoma) or later.
 - **ffmpeg** is recommended for merging high-quality video/audio formats and converting to specific audio types.
   - Install via Homebrew: `brew install ffmpeg`
-<<<<<<< HEAD
- 
-### Browser Cookies & Permissions
-If you choose to use **Safari** for browser authentication to download restricted content, macOS Sandboxing requires you to grant **Full Disk Access** to latte.
-Go to **System Settings → Privacy & Security → Full Disk Access** and toggle latte on. (Other browsers like Chrome or Firefox may prompt you for your Keychain password).
-=======
->>>>>>> 2e86d3a (Update app and repository configuration)
 
 ---
 
@@ -73,8 +64,6 @@ xattr -rd com.apple.quarantine /Applications/latte.app
 
 ---
 
-<<<<<<< HEAD
-=======
 ## 🔒 Restricted Content & Authentication
 
 latte allows you to download private, age-restricted, or login-required content (like private Instagram Reels/Stories or Reddit videos) by securely reading the cookies from your daily web browser.
@@ -95,7 +84,6 @@ latte allows you to download private, age-restricted, or login-required content 
 
 ---
 
->>>>>>> 2e86d3a (Update app and repository configuration)
 ## Getting Started
 
 1. Click the latte icon in your menu bar.
@@ -126,6 +114,23 @@ rm -rf ~/Library/Application\ Support/com.arinltte.latte 2>/dev/null
 rm -rf ~/Library/Saved\ Application\ State/com.arinltte.latte.savedState 2>/dev/null
 killall cfprefsd
 ```
+
+---
+
+## 🌐 Supported Sites
+
+latte is powered by [yt-dlp](https://github.com/yt-dlp/yt-dlp) and supports downloading from **1,800+ websites**, including:
+
+- **Video platforms**: YouTube, Vimeo, Dailymotion, Twitch, Rumble, Odysee, PeerTube
+- **Social media**: TikTok, Instagram, Facebook, Twitter/X, Reddit, Tumblr, Pinterest
+- **Music & audio**: SoundCloud, Bandcamp, Mixcloud, Audiomack
+- **News & media**: BBC, CNN, NPR, Reuters, ABC, NBC, CBS, The Guardian, Bloomberg
+- **Sports**: ESPN, MLB, NBA, NFL, Olympics
+- **Asian platforms**: Bilibili, Niconico, Youku, iQIYI, Weibo
+- **Live streams**: Twitch, YouTube Live, Kick, Steam Community
+- **Podcasts & radio**: Apple Podcasts, Spotify, Stitcher, iHeartRadio
+
+For the complete and always up-to-date list, see the [yt-dlp supported sites](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md) documentation.
 
 ---
 
@@ -161,5 +166,9 @@ Build and run the `latte` scheme in Xcode. Requires Xcode 16 or later.
 Distributed under the MIT License. See `LICENSE` for more information.
 
 <p align="center">
-  <i>Developed by arinltte · cjshen00@gmail.com</i>
+  <i>Logo by GUMO · https://www.instagram.com/gumoooo._/</i>
+</p>
+
+<p align="center">
+  <i>Developed by arinltte · arinltte00@gmail.com</i>
 </p>
