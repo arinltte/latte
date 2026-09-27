@@ -20,6 +20,7 @@ extension Notification.Name {
     static let windowMovableChanged = Notification.Name("windowMovableChanged")
     static let menuBarIconChanged = Notification.Name("menuBarIconChanged")
     static let panelVisibilityChanged = Notification.Name("panelVisibilityChanged")
+    static let panelDismissRequested = Notification.Name("panelDismissRequested")
 }
 
 class AppDelegate: NSObject, NSApplicationDelegate {
@@ -96,6 +97,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             if let icon = notification.userInfo?["icon"] as? String {
                 self?.statusItem?.button?.image = NSImage(systemSymbolName: icon, accessibilityDescription: "Latte")
             }
+        }
+
+        NotificationCenter.default.addObserver(
+            forName: .panelDismissRequested,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.hidePanel()
         }
     }
 

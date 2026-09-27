@@ -799,6 +799,13 @@ class YTDLPClient: ObservableObject {
         return "yt-dlp"
     }
 
+    nonisolated private func processEnvironment() -> [String: String] {
+        var environment = ProcessInfo.processInfo.environment
+        let existingPath = environment["PATH"] ?? "/usr/bin:/bin:/usr/sbin:/sbin"
+        environment["PATH"] = "/opt/homebrew/bin:/usr/local/bin:\(existingPath)"
+        return environment
+    }
+
     private func parseSingleVideo(info: [String: Any]) {
         hasVideoInfo = true
         isPlaylist = false

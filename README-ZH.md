@@ -165,5 +165,5 @@ open latte.xcodeproj
 基于 MIT 许可证分发。详情请参阅 `LICENSE` 文件。
 
 <p align="center">
-  <i>由 arinltte 开发 · cjshen00@gmail.com</i>
+  <i>由 arinltte 开发 · arinltte00@gmail.com</i>
 </p>

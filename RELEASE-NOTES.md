@@ -14,6 +14,15 @@ downloads, and latte has a brand-new look.
 
 ---
 
+## 🌟 Community improvements merged
+
+This release also merges several upstream contributor improvements:
+
+- **Persistent thumbnail cache** — thumbnails are cached in memory, so they no
+  longer re-download every time the panel is shown.
+- **Animated background pauses while the panel is hidden** — less CPU when idle.
+- **Safer yt-dlp argument handling** — no raw shell injection for URLs/paths.
+
 ## 🐛 Fixed
 
 ### 1. "File name too long" error on long titles

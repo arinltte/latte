@@ -15,6 +15,13 @@
   <a href="./README.md">English</a> | <a href="./README-ZH.md">中文文档</a>
 </p>
 
+<div align="center">
+  <a href="https://trendshift.io/repositories/45209?utm_source=trendshift-badge&utm_medium=badge&utm_campaign=badge-trendshift-45209" target="_blank" rel="noopener noreferrer">
+    <img src="https://trendshift.io/api/badge/trendshift/repositories/45209/daily?language=Swift" alt="arinltte/latte | Trendshift" width="250" height="55"/>
+  </a>
+</div>
+
+
 ---
 
 **latte** is a lightweight, ultra-fast video and audio downloader for macOS that lives entirely in your menu bar. Built natively with SwiftUI, it allows you to download media from thousands of popular websites instantly—without opening a browser tab, dealing with ads, or navigating complex command-line tools.
